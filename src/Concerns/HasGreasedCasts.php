@@ -9,16 +9,17 @@ use Illuminate\Support\Collection as BaseCollection;
  * Tier 3 — narrowed cast dispatch.
  *
  * Replaces Eloquent's per-access `switch` in `castAttribute()` with a flyweight
- * resolved once per built-in cast type. The cast-TYPE decision is fixed per cast
- * type and memoized; the value transform still defers to the model at call time,
- * so `asDate`/`fromJson`/etc. overrides are honored.
+ * resolved once per cast type. The value transform still defers to the model at
+ * call time, so `asDate`/`fromJson`/etc. overrides — and `getCastType()`
+ * overrides, which still drive the type decision — are honored.
  *
- * THE CAVEAT (the whole reason this is opt-in): overriding the undocumented
- * resolution internals — `getCastType()` / `isEncryptedCastable()` — *per key*
- * is no longer honored, because the decision is made per cast type. If you need
- * a custom cast, write a `CastsAttributes` class (the documented, supported
- * extension point) — that still works perfectly. Nobody overrides those Model
- * internals on purpose; that's exactly the "flexibility" tax this removes.
+ * THE NARROWING (the reason this is opt-in, asserted in tests): a per-key
+ * `isEncryptedCastable()` override is not honored — encryption is decided from
+ * the built-in encrypted cast types, not re-derived per key. Use an `encrypted:*`
+ * cast (the idiomatic way), which works. And a model that assigns a *different*
+ * `$casts` per instance in its constructor isn't supported (the map is cached per
+ * class); use `mergeCasts()`/`withCasts()` at runtime instead. Custom casts
+ * (`CastsAttributes`) — the documented extension point — work unchanged.
  *
  * Built-in primitive/date/json casts are accelerated here; enum, custom-class,
  * and encrypted casts defer to the framework's own (correct) handling.

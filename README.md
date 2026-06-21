@@ -54,20 +54,30 @@ Reproduce: `php benchmarks/realworld.php` (see [`benchmarks/`](benchmarks)). The
 gain scales with how much your request hydrates — wide selects, eager loads, and
 serialization-heavy API responses benefit most.
 
-## The one caveat
+## Caveats
 
-The cast tier narrows one contract: the cast-*type* decision is resolved per cast
-type, not per key. So overriding the **undocumented** internals `getCastType()` or
-`isEncryptedCastable()` *per attribute* is not honored on greased models.
+Two narrow, obscure things change on a greased model's cast path. Custom casts
+([`CastsAttributes`](https://laravel.com/docs/eloquent-mutators#custom-casts)), the
+documented extension point, **work unchanged** — and so does overriding
+`getCastType()`. The full cast contract is asserted byte-identical to vanilla in
+the test suite (every cast type × edge values × dirty-checking).
 
-In practice this affects ~nobody: if you want a custom cast you write a
-[`CastsAttributes`](https://laravel.com/docs/eloquent-mutators#custom-casts) class —
-the documented, supported extension point — and **that works unchanged.** Nobody
-overrides those Model internals on purpose. Removing the machinery that preserves
-that unused flexibility is precisely where a chunk of the speedup comes from.
+1. **Per-instance `$casts` set in a constructor isn't supported.** The cast map is
+   cached per class, so assigning a *different* `$casts` per instance inside a
+   model's constructor would serve the first instance's map. Use `mergeCasts()` /
+   `withCasts()` at runtime instead (these are honored — the cache steps aside).
+   This pattern is vanishingly rare in real apps.
 
-Want the speed without even that caveat? Use the tiers à la carte and skip the cast
-one:
+2. **A per-key `isEncryptedCastable()` override is not honored.** Overriding that
+   undocumented internal to encrypt an attribute whose cast type isn't itself an
+   `encrypted:*` type won't decrypt on a greased model. The idiomatic way —
+   `'ssn' => 'encrypted:string'` — works perfectly. Nobody overrides this on purpose.
+
+Removing the machinery that preserves that unused flexibility is precisely where a
+chunk of the speedup comes from.
+
+Want zero cast caveats at all? Use the tiers à la carte and skip the cast one —
+you keep the hydration and metadata wins:
 
 ```php
 use Grease\Concerns\HasGreasedHydration;
