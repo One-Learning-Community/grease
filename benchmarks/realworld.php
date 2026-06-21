@@ -161,13 +161,19 @@ foreach ($WORKLOADS as $name => $w) {
 }
 echo "PARITY: PASS — grease output byte-identical to vanilla.\n".str_repeat('-', 70)."\n";
 
-function median(array $xs): float
+// Linear-interpolated percentile (same method as numpy's default). p in [0,100].
+function percentile(array $xs, float $p): float
 {
     sort($xs);
     $n = count($xs);
-    $m = intdiv($n, 2);
+    if ($n === 1) {
+        return $xs[0];
+    }
+    $rank = $p / 100 * ($n - 1);
+    $lo = (int) floor($rank);
+    $hi = (int) ceil($rank);
 
-    return $n % 2 ? $xs[$m] : ($xs[$m - 1] + $xs[$m]) / 2;
+    return $xs[$lo] + ($xs[$hi] - $xs[$lo]) * ($rank - $lo);
 }
 
 $rounds = (int) ($argv[1] ?? 25);
@@ -186,7 +192,10 @@ foreach ($WORKLOADS as $name => $w) {
             }
         }
     }
-    $p = median($t['plain']) / 1e3;
-    $g = median($t['grease']) / 1e3;
-    printf("%-20s  vanilla %9.1f µs   grease %9.1f µs   Δ %+6.1f%%\n", $name, $p, $g, ($g - $p) / $p * 100);
+    echo "$name\n";
+    foreach ([50, 75, 90, 99] as $pct) {
+        $p = percentile($t['plain'], $pct) / 1e3;
+        $g = percentile($t['grease'], $pct) / 1e3;
+        printf("  p%-2d  vanilla %9.1f µs   grease %9.1f µs   Δ %+6.1f%%\n", $pct, $p, $g, ($g - $p) / $p * 100);
+    }
 }

@@ -28,31 +28,7 @@ abstract class TestCase extends Orchestra
      */
     protected function sampleRow(array $overrides = []): array
     {
-        return array_merge([
-            'id' => 1,
-            'int_val' => '42',
-            'real_val' => '2.5',
-            'float_val' => '3.14159',
-            'dec_val' => '12.34',
-            'str_val' => 100,
-            'bool_val' => '1',
-            'obj_val' => '{"x":1,"y":2}',
-            'arr_val' => '{"a":[1,2],"b":3}',
-            'json_val' => '[1,2,3]',
-            'coll_val' => '[4,5,6]',
-            'date_val' => '2026-03-04 09:10:11',
-            'dt_val' => '2026-03-04 09:10:11',
-            'cdt_val' => '2026-03-04 09:10:11',
-            'imm_date_val' => '2026-03-04 09:10:11',
-            'imm_dt_val' => '2026-03-04 09:10:11',
-            'icdt_val' => '2026-03-04 09:10:11',
-            'ts_val' => '2026-03-04 09:10:11',
-            'hashed_val' => 'stored-as-is-on-read',
-            'status_val' => 'active',
-            'upper_val' => 'hello',
-            'created_at' => '2026-01-01 00:00:00',
-            'updated_at' => '2026-01-01 00:00:00',
-        ], $overrides);
+        return array_merge(\Grease\Tests\Fixtures\SampleData::row(), $overrides);
     }
 
     /** Every cast column (excludes id; includes the timestamp date columns). */

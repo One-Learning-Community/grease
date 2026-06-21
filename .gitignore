@@ -3,6 +3,7 @@
 /.phpunit.cache/
 /.phpunit.result.cache
 /build/
+/.phpbench/
 .DS_Store
 .idea/
 .phpunit.result.cache

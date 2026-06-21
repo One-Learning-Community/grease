@@ -17,6 +17,7 @@
     },
     "require-dev": {
         "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "phpbench/phpbench": "^1.2",
         "phpunit/phpunit": "^11.0 || ^12.0"
     },
     "autoload": {
@@ -26,11 +27,20 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Grease\\Tests\\": "tests/"
+            "Grease\\Tests\\": "tests/",
+            "Grease\\Bench\\": "benchmarks/Bench/"
         }
     },
+    "scripts": {
+        "test": "phpunit",
+        "bench": "phpbench run --report=aggregate",
+        "bench:suite": "phpbench run benchmarks/Bench/SuiteBench.php --report=aggregate"
+    },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "phpbench/phpbench": false
+        }
     },
     "minimum-stability": "dev",
     "prefer-stable": true

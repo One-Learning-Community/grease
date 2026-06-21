@@ -104,9 +104,27 @@ models that don't use it.
 | `HasGreasedAttributes`  | `getCasts` / `getDates` / mutator probes / `getDateFormat`              |
 | `HasGreasedCasts`       | per-access cast `switch` → resolved flyweights (see caveat)             |
 
+## Benchmarks
+
+```bash
+composer bench                  # phpbench: per-operation A/B + the suite, end-to-end
+php benchmarks/realworld.php     # macro: real endpoints, full request incl. SQL
+```
+
+`composer bench` runs two phpbench suites over the **same fixtures the tests
+prove byte-identical**:
+
+- **`CastBench`** — in-memory A/B with paired `*Vanilla` / `*Greased` subjects, so
+  you read the per-operation delta directly (hydrate, read, `toArray`, set+dirty).
+- **`SuiteBench`** — drives the real SQL roundtrip test suite (migrate → query →
+  write → eager-load) through a booted app, so any covered path's cost is tracked.
+
+Representative `CastBench` deltas (vanilla → greased): hydrate −61%, set+dirty
+−41%, read-all-casts −36%, `toArray` −20%.
+
 ## Requirements
 
-PHP 8.2+, Laravel 11/12.
+PHP 8.2+, Laravel 11/12/13.
 
 ## License
 
