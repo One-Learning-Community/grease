@@ -1,0 +1,59 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4', '8.5']
+        laravel: ['11.*', '12.*', '13.*']
+        include:
+          - laravel: '11.*'
+            testbench: '9.*'
+          - laravel: '12.*'
+            testbench: '10.*'
+          - laravel: '13.*'
+            testbench: '11.*'
+        exclude:
+          # Laravel 11 (maintenance) is not tested on PHP 8.5.
+          - laravel: '11.*'
+            php: '8.5'
+          # Laravel 13 requires PHP 8.3+. Adjust if its floor differs.
+          - laravel: '13.*'
+            php: '8.2'
+
+    name: PHP ${{ matrix.php }} · Laravel ${{ matrix.laravel }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, pdo, sqlite, pdo_sqlite
+          coverage: none
+
+      - name: Pin Laravel & Testbench for this matrix leg
+        run: >
+          composer require
+          "laravel/framework:${{ matrix.laravel }}"
+          "orchestra/testbench:${{ matrix.testbench }}"
+          --no-interaction --no-update
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Run test suite
+        run: vendor/bin/phpunit
+
+      - name: Parity smoke against real queries (the package's core promise)
+        run: php benchmarks/realworld.php 1

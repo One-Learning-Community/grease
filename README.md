@@ -1,5 +1,7 @@
 # Grease
 
+[![tests](https://github.com/onelearningcommunity/grease/actions/workflows/tests.yml/badge.svg)](https://github.com/onelearningcommunity/grease/actions/workflows/tests.yml)
+
 **Opt-in performance for Eloquent's hot path — the wins upstream won't merge.**
 
 Grease is a single trait you add to a model. It makes attribute hydration, casting,
