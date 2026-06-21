@@ -182,9 +182,17 @@ Roughly highest-leverage first.
      degrade), **with-listeners −18%**. This is the "Grease is more than Eloquent"
      axis: opt in by binding it as the `events` singleton; it speeds up *every*
      dispatch (views, cache, model events), not just Eloquent.
-   - **Still open:** the opt-in mechanism (a service provider / `php artisan`-free
-     binding that swaps `events` early and migrates already-registered listeners), and
-     wiring it into the macro for a combined end-to-end number.
+   - **Macro: now full-stack A/B** — `realworld.php` runs the vanilla arm on the stock
+     dispatcher and the greased arm on `Grease\Events\Dispatcher`. The dispatcher's
+     incremental contribution there is **~1%** (index_users greased 2976→2944 µs):
+     model events are zero-listener and dispatch (~0.3–0.5 µs/row) is dwarfed by the
+     ORM work the model tiers already cut. **The Eloquent macro understates this tier
+     on purpose** — its real value is *app-wide* event traffic (view rendering, cache,
+     custom events), which an Eloquent benchmark doesn't touch. The truer number is
+     `DispatcherBench` (−53% per no-listener dispatch).
+   - **Still open:** the opt-in binding (swap `events` early + Eloquent's static
+     dispatcher cache + migrate already-registered listeners), and — to show the real
+     win — an event-heavy bench (e.g. view-render-shaped dispatch traffic).
 2. **Date-cast round-trip elimination.** ✅ **DONE for timestamps** — Tier 4
    (`HasGreasedSerialization`). The headline insight from building it: the *default*
    `serializeDate` (`toJSON`) does **not** produce the stored string — `2026-01-01

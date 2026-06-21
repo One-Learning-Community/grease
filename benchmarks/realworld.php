@@ -17,6 +17,7 @@ require __DIR__.'/../vendor/autoload.php';
 
 use Grease\Bench\Support\BootsEloquent;
 use Grease\Concerns\HasGrease;
+use Grease\Events\Dispatcher as GreaseDispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 
@@ -152,8 +153,22 @@ $probe = function (callable $fn) use ($conn) {
     }
 };
 
+// Full-stack A/B: the vanilla arm runs on the stock dispatcher, the greased arm on
+// Grease's faster dispatcher — so the macro reflects the events tier too, not just
+// the model tiers. Both carry zero listeners (the realistic model-event hot path).
+$dispatchers = [
+    'plain' => Model::getEventDispatcher(),                      // the stock one BootsEloquent wired
+    'grease' => new GreaseDispatcher($capsule->getContainer()),
+];
+$useDispatcher = fn (string $arm) => Model::setEventDispatcher($dispatchers[$arm]);
+
 foreach ($WORKLOADS as $name => $w) {
-    if ($probe(fn () => $w($MODELS['plain'])) !== $probe(fn () => $w($MODELS['grease']))) {
+    $useDispatcher('plain');
+    $plainOut = $probe(fn () => $w($MODELS['plain']));
+    $useDispatcher('grease');
+    $greaseOut = $probe(fn () => $w($MODELS['grease']));
+
+    if ($plainOut !== $greaseOut) {
         fwrite(STDERR, "PARITY FAIL: $name\n");
         exit(1);
     }
@@ -182,6 +197,7 @@ foreach ($WORKLOADS as $name => $w) {
     $t = ['plain' => [], 'grease' => []];
     for ($r = 0; $r < $warmup + $rounds; $r++) {
         foreach ($r % 2 ? ['grease', 'plain'] : ['plain', 'grease'] as $arm) {
+            $useDispatcher($arm);
             gc_collect_cycles();
             $t0 = hrtime(true);
             $w($MODELS[$arm]);
