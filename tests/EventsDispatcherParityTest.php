@@ -1,0 +1,257 @@
+<?php
+
+namespace Grease\Tests;
+
+use ArrayObject;
+use Grease\Events\Dispatcher as GreasedDispatcher;
+use Grease\Support\WildcardPattern;
+use Illuminate\Container\Container;
+use Illuminate\Events\Dispatcher as VanillaDispatcher;
+use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+
+interface ShipmentEvent {}
+
+class OrderShipped implements ShipmentEvent
+{
+    public function __construct(public string $id = 'o1') {}
+}
+
+/**
+ * Grease\Events\Dispatcher must behave byte-for-byte like the stock dispatcher —
+ * same listeners, same order, same return values — only faster. Every test runs an
+ * identical script against a vanilla and a greased dispatcher and asserts the
+ * dispatch return value AND the full invocation log match.
+ */
+class EventsDispatcherParityTest extends TestCase
+{
+    /** @return array{0: VanillaDispatcher, 1: GreasedDispatcher} */
+    private function pair(): array
+    {
+        return [new VanillaDispatcher(new Container), new GreasedDispatcher(new Container)];
+    }
+
+    /**
+     * Register identical listeners (via $register) on both dispatchers, dispatch the
+     * same event, and assert the return value and invocation log are identical.
+     */
+    private function assertParity(callable $register, string|object $event, array $payload = [], bool $halt = false): void
+    {
+        [$v, $g] = $this->pair();
+        $vlog = new ArrayObject;
+        $glog = new ArrayObject;
+
+        $register($v, $vlog);
+        $register($g, $glog);
+
+        $vr = $v->dispatch($event, $payload, $halt);
+        $gr = $g->dispatch($event, $payload, $halt);
+
+        $this->assertSame($vr, $gr, 'dispatch() return value diverged');
+        $this->assertSame($vlog->getArrayCopy(), $glog->getArrayCopy(), 'invocation log diverged');
+    }
+
+    public function test_no_listeners_returns_identical(): void
+    {
+        [$v, $g] = $this->pair();
+
+        $this->assertSame($v->dispatch('foo.bar'), $g->dispatch('foo.bar'));
+        $this->assertSame($v->dispatch('foo.bar', ['a', 'b']), $g->dispatch('foo.bar', ['a', 'b']));
+        $this->assertSame($v->dispatch('foo.bar', [], true), $g->dispatch('foo.bar', [], true));
+        $this->assertSame($v->until('foo.bar'), $g->until('foo.bar'));
+    }
+
+    public function test_direct_listeners_fire_in_order_with_spread_payload(): void
+    {
+        $this->assertParity(function ($d, $log) {
+            $d->listen('user.created', function (...$args) use ($log) {
+                $log[] = ['first', $args];
+
+                return 'r1';
+            });
+            $d->listen('user.created', function (...$args) use ($log) {
+                $log[] = ['second', $args];
+
+                return 'r2';
+            });
+        }, 'user.created', ['alice', 42]);
+    }
+
+    public function test_halt_returns_first_non_null(): void
+    {
+        $this->assertParity(function ($d, $log) {
+            $d->listen('q', function () use ($log) {
+                $log[] = 'a';
+
+                return null;
+            });
+            $d->listen('q', function () use ($log) {
+                $log[] = 'b';
+
+                return 'stop-here';
+            });
+            $d->listen('q', function () use ($log) {
+                $log[] = 'c-should-not-run';
+
+                return 'never';
+            });
+        }, 'q', [], true);
+    }
+
+    public function test_false_response_breaks_propagation(): void
+    {
+        $this->assertParity(function ($d, $log) {
+            $d->listen('q', function () use ($log) {
+                $log[] = 'a';
+
+                return 'keep';
+            });
+            $d->listen('q', function () use ($log) {
+                $log[] = 'b';
+
+                return false;
+            });
+            $d->listen('q', function () use ($log) {
+                $log[] = 'c-should-not-run';
+            });
+        }, 'q');
+    }
+
+    public function test_wildcard_listeners_receive_name_and_payload(): void
+    {
+        $this->assertParity(function ($d, $log) {
+            $d->listen('user.*', function ($name, $payload) use ($log) {
+                $log[] = ['wild', $name, $payload];
+            });
+        }, 'user.created', ['x']);
+    }
+
+    public function test_direct_then_wildcard_then_interface_order(): void
+    {
+        // An object event with a direct listener, a wildcard listener, and an
+        // interface listener — the stock order is direct, wildcard, interface.
+        $this->assertParity(function ($d, $log) {
+            $d->listen(OrderShipped::class, function () use ($log) {
+                $log[] = 'direct';
+            });
+            $d->listen('*', function ($name) use ($log) {
+                $log[] = ['wild', $name];
+            });
+            $d->listen(ShipmentEvent::class, function () use ($log) {
+                $log[] = 'interface';
+            });
+        }, new OrderShipped('o9'));
+    }
+
+    public function test_non_matching_wildcard_does_not_fire(): void
+    {
+        $this->assertParity(function ($d, $log) {
+            $d->listen('billing.*', function () use ($log) {
+                $log[] = 'should-not-run';
+            });
+            $d->listen('user.created', function () use ($log) {
+                $log[] = 'direct';
+            });
+        }, 'user.created');
+    }
+
+    public function test_object_event_passes_instance_as_payload(): void
+    {
+        $event = new OrderShipped('o42');
+
+        $this->assertParity(function ($d, $log) {
+            $d->listen(OrderShipped::class, function ($e) use ($log) {
+                $log[] = $e->id;
+            });
+        }, $event);
+    }
+
+    public function test_forget_removes_listener_identically(): void
+    {
+        [$v, $g] = $this->pair();
+
+        foreach ([$v, $g] as $d) {
+            $d->listen('a.b', fn () => 'x');
+            $d->listen('w.*', fn () => 'y');
+        }
+
+        $v->forget('a.b');
+        $g->forget('a.b');
+        $v->forget('w.*');
+        $g->forget('w.*');
+
+        $this->assertSame($v->dispatch('a.b'), $g->dispatch('a.b'));
+        $this->assertSame($v->dispatch('w.x'), $g->dispatch('w.x'));
+        $this->assertSame($v->hasListeners('a.b'), $g->hasListeners('a.b'));
+    }
+
+    public function test_listener_added_after_dispatch_is_seen(): void
+    {
+        // Exercises listener-cache invalidation: dispatch once (populating the cache),
+        // then register another listener and dispatch again.
+        [$v, $g] = $this->pair();
+        $vlog = new ArrayObject;
+        $glog = new ArrayObject;
+
+        foreach ([[$v, $vlog], [$g, $glog]] as [$d, $log]) {
+            $d->listen('e', function () use ($log) {
+                $log[] = 'first';
+            });
+            $d->dispatch('e');
+            $d->listen('e', function () use ($log) {
+                $log[] = 'second';
+            });
+            $d->dispatch('e');
+        }
+
+        $this->assertSame($vlog->getArrayCopy(), $glog->getArrayCopy());
+    }
+
+    public function test_repeated_dispatch_of_same_event_is_identical(): void
+    {
+        // The listener-cache path: dispatching the same event many times must yield
+        // the same responses each time.
+        $this->assertParity(function ($d, $log) {
+            $d->listen('tick', function () use ($log) {
+                $log[] = 'x';
+
+                return 'resp';
+            });
+        }, 'tick');
+
+        [$v, $g] = $this->pair();
+        $v->listen('tick', fn () => 'resp');
+        $g->listen('tick', fn () => 'resp');
+        for ($i = 0; $i < 5; $i++) {
+            $this->assertSame($v->dispatch('tick'), $g->dispatch('tick'), "iteration $i");
+        }
+    }
+
+    #[DataProvider('wildcardCases')]
+    public function test_wildcard_pattern_matches_str_is(string $pattern, string $value): void
+    {
+        // The pre-compiled pattern must agree with Str::is on every case — that is
+        // the equivalence the dispatcher relies on for wildcard matching.
+        $this->assertSame(
+            Str::is($pattern, $value),
+            (new WildcardPattern($pattern))->matches($value),
+            "[$pattern] vs [$value]"
+        );
+    }
+
+    public static function wildcardCases(): array
+    {
+        $patterns = ['*', 'user.*', 'user.created', 'a.*.c', 'eloquent.retrieved: *', 'App\\Events\\*', 'a*b', 'no.match'];
+        $values = ['user.created', 'user.profile.updated', 'a.b.c', 'a.c', 'eloquent.retrieved: App\\User', 'App\\Events\\Foo', 'aXXb', 'billing.charged', ''];
+
+        $cases = [];
+        foreach ($patterns as $p) {
+            foreach ($values as $val) {
+                $cases["[$p] ~ [$val]"] = [$p, $val];
+            }
+        }
+
+        return $cases;
+    }
+}

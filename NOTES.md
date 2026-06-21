@@ -55,8 +55,14 @@ both proof and regression guard.
   probe-certified, byte-identical, defers otherwise).
 - `Concerns/HasGrease.php` — umbrella (all four).
 - `GreasedModel.php` — abstract base for `extends` users.
+- `Events/Dispatcher.php` — **the events dispatcher tier** (port of laravel/framework
+  #51184): a drop-in `Illuminate\Events\Dispatcher` subclass — no-listener fast path,
+  cached `getListeners()`, pre-compiled wildcard patterns. Behaviour-identical, just
+  faster. Not a model trait — a *different axis*: bind it as the `events` singleton.
+- `Support/WildcardPattern.php` — pre-compiled wildcard regex (reproduces `Str::is`),
+  used by the dispatcher so wildcard matching isn't recompiled per call.
 
-### Tests (`tests/`) — 109 tests / 409 assertions, green on real Laravel
+### Tests (`tests/`) — 192 tests / 510 assertions, green on real Laravel
 - `CastParityTest` — every cast type × read + type-identity + `toArray` + all-null;
   encrypted deferral; enum/custom-class.
 - `CastEquivalenceParityTest` — the ported cast-objects ~40-case differential matrix
@@ -69,6 +75,10 @@ both proof and regression guard.
   set-mutator/write; `flushGreaseBlueprint`.
 - `SqlRoundtripTest` — real driver: migrate → insert → select/find/where, insert+
   reread, update, `fresh()`, eager-loaded relations.
+- `EventsDispatcherParityTest` — events tier: A/B vs the stock dispatcher (same
+  listeners, order, return values) across no-listener/direct/wildcard/interface/halt/
+  false-break/forget/cache-invalidation, plus a 72-case `WildcardPattern` ≡ `Str::is`
+  matrix. Pure unit tests (no DB).
 - `DateSerializationParityTest` — Tier 4, both paths. Timestamps: UTC ISO fast path,
   non-UTC defer, storage-format `serializeDate` identity (any tz), custom `dateFormat`
   defer, sub-second / date-only / Carbon-instance / null per-value defers, zero-offset
@@ -95,6 +105,8 @@ both proof and regression guard.
   (`SampleData::timestampsRow()`) and a `datetime`/`immutable_datetime`-cast model
   (`SampleData::datetimeCastRow()`). Pinned to UTC, with a parity guard that refuses
   to time a non-identical state. The harness counterpart to `DateSerializationParityTest`.
+- `Bench/DispatcherBench.php` — events tier A/B (greased vs stock dispatcher), both
+  seeded with wildcard listeners (the real-app shape): no-listener −53%, with-listeners −18%.
 - `Bench/SuiteBench.php` + `Bench/Support/DrivesTestSuite.php` — phpbench-via-phpunit
   bridge: drives each no-arg `test*` of `SqlRoundtripTest` as a subject through a
   booted Testbench app (skips `tearDown` — it fatals under the phpbench runtime).
@@ -158,13 +170,21 @@ Roughly highest-leverage first.
      set per event name, but `hasListeners()`/`hasWildcardListeners()` re-scans every
      wildcard pattern uncached on every call — asking "is anyone listening?" costs more
      than telling nobody.
-   - **So it's cache-or-nothing.** The only winning shape is a per-class+event cached
-     listener-presence flag (avoiding the per-call scan) — which reintroduces exactly
-     the runtime-registration staleness risk above, for a **~5% read / less on write**
-     payoff. Worse risk/reward than it looked. The faithful harness was the real prize
-     of this exploration; the tier itself is parked pending a safe invalidation idea
-     (e.g. decorating the global dispatcher's `listen()` — but that's the "global axis,
-     not per-model" problem again).
+   - **So a per-model skip is the wrong shape.** The winning shape is to optimize the
+     *dispatcher itself* — which is exactly laravel/framework#51184.
+   - ✅ **BUILT: the events dispatcher tier** (`Grease\Events\Dispatcher`, port of
+     #51184). Three optimizations, all behaviour-identical (83 A/B parity tests):
+     no-listener fast path off a cached presence check, cached `getListeners()`
+     (`makeListener` once per event, not per dispatch), and pre-compiled
+     `WildcardPattern`s (the fix for the uncached re-scan that sank the live check).
+     Measured (rstdev ~1.3%): **no-listener dispatch −53%** (0.97→0.45 µs, *constant*
+     regardless of registered wildcards — where stock and the per-model skip both
+     degrade), **with-listeners −18%**. This is the "Grease is more than Eloquent"
+     axis: opt in by binding it as the `events` singleton; it speeds up *every*
+     dispatch (views, cache, model events), not just Eloquent.
+   - **Still open:** the opt-in mechanism (a service provider / `php artisan`-free
+     binding that swaps `events` early and migrates already-registered listeners), and
+     wiring it into the macro for a combined end-to-end number.
 2. **Date-cast round-trip elimination.** ✅ **DONE for timestamps** — Tier 4
    (`HasGreasedSerialization`). The headline insight from building it: the *default*
    `serializeDate` (`toJSON`) does **not** produce the stored string — `2026-01-01
