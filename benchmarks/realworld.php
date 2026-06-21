@@ -139,8 +139,22 @@ $WORKLOADS = [
 
 // --- Parity + harness. ---------------------------------------------------------
 
+// Run each parity probe inside a rolled-back transaction so mutating workloads
+// (bulk_update) don't pollute the shared DB between the two arms — both compare
+// against identical pristine state.
+$conn = $capsule->getConnection();
+$probe = function (callable $fn) use ($conn) {
+    $conn->beginTransaction();
+
+    try {
+        return json_encode($fn());
+    } finally {
+        $conn->rollBack();
+    }
+};
+
 foreach ($WORKLOADS as $name => $w) {
-    if (json_encode($w($MODELS['plain'])) !== json_encode($w($MODELS['grease']))) {
+    if ($probe(fn () => $w($MODELS['plain'])) !== $probe(fn () => $w($MODELS['grease']))) {
         fwrite(STDERR, "PARITY FAIL: $name\n");
         exit(1);
     }
