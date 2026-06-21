@@ -146,14 +146,25 @@ Roughly highest-leverage first.
      greased read request) + ~7 µs/save on writes. Real and it stacks, but **modest —
      not a date-tier headline.** Fits the portfolio thesis ("marginal in isolation,
      compounds bundled") exactly.
-   - **Design + risk:** override `fireModelEvent` to short-circuit when
-     `hasListeners("eloquent.{$event}: ".static::class)` is false, cached per
-     class+event in the blueprint. The catch is runtime mutation — observers/listeners
-     can be registered *after* the cache is built (and `$dispatchesEvents`, booted
-     observers, global `eloquent.*` wildcards all count) — so it needs divergence
-     detection or a conservative "any dispatcher-level change → recheck" guard. Get
-     this wrong and you silently drop a real event: the parity bar here is behavioral
-     (did the listener fire?), not just byte-output.
+   - **Design + risk:** override `fireModelEvent` to short-circuit when no listener
+     exists for `"eloquent.{$event}: ".static::class`. The parity bar here is
+     *behavioral* (did the listener fire?), not byte-output — get it wrong and you
+     silently drop a real event.
+   - **Measured the obvious design and it doesn't work.** A *live*
+     `$dispatcher->hasListeners(...)` gate is a **net loss**: it recovers almost none
+     of the dispatch cost (read 1.69→1.49 µs, ~12%) and with a handful of registered
+     `eloquent.*` wildcards it's **~2× *slower* than just dispatching** (read 1.46→3.40
+     µs; save 7.0→14.0 µs). Reason: `dispatch()` caches the resolved (empty) listener
+     set per event name, but `hasListeners()`/`hasWildcardListeners()` re-scans every
+     wildcard pattern uncached on every call — asking "is anyone listening?" costs more
+     than telling nobody.
+   - **So it's cache-or-nothing.** The only winning shape is a per-class+event cached
+     listener-presence flag (avoiding the per-call scan) — which reintroduces exactly
+     the runtime-registration staleness risk above, for a **~5% read / less on write**
+     payoff. Worse risk/reward than it looked. The faithful harness was the real prize
+     of this exploration; the tier itself is parked pending a safe invalidation idea
+     (e.g. decorating the global dispatcher's `listen()` — but that's the "global axis,
+     not per-model" problem again).
 2. **Date-cast round-trip elimination.** ✅ **DONE for timestamps** — Tier 4
    (`HasGreasedSerialization`). The headline insight from building it: the *default*
    `serializeDate` (`toJSON`) does **not** produce the stored string — `2026-01-01
