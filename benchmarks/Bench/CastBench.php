@@ -2,10 +2,10 @@
 
 namespace Grease\Bench;
 
+use Grease\Bench\Support\BootsEloquent;
 use Grease\Tests\Fixtures\GreasedSample;
 use Grease\Tests\Fixtures\SampleData;
 use Grease\Tests\Fixtures\VanillaSample;
-use Illuminate\Database\Capsule\Manager as Capsule;
 use PhpBench\Attributes\BeforeMethods;
 use PhpBench\Attributes\Iterations;
 use PhpBench\Attributes\RetryThreshold;
@@ -27,21 +27,13 @@ use PhpBench\Attributes\Warmup;
 ]
 class CastBench
 {
-    private static bool $booted = false;
-
     private VanillaSample $vanilla;
 
     private GreasedSample $greased;
 
     public function setUp(): void
     {
-        if (! self::$booted) {
-            $capsule = new Capsule;
-            $capsule->addConnection(['driver' => 'sqlite', 'database' => ':memory:']);
-            $capsule->setAsGlobal();
-            $capsule->bootEloquent();
-            self::$booted = true;
-        }
+        BootsEloquent::capsule();
 
         $this->vanilla = (new VanillaSample)->newFromBuilder(SampleData::row());
         $this->greased = (new GreasedSample)->newFromBuilder(SampleData::row());

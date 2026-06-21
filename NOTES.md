@@ -82,6 +82,10 @@ both proof and regression guard.
   method — a trait can't redeclare `Model::$casts`).
 
 ### Benchmarks (`benchmarks/`)
+- `Bench/Support/BootsEloquent.php` — shared Capsule boot for every bench, **with a
+  real stock event dispatcher wired in** so model events actually fire (every
+  hydrated row → `retrieved`, every save → 4 events). Zero listeners by design — the
+  realistic "dispatcher present, nothing on the hot path" baseline.
 - `realworld.php` — macro, Capsule + real queries, vanilla vs greased, drift-
   cancelled, reports per-request µs incl. SQL. Doubles as a parity gate.
 - `Bench/CastBench.php` — phpbench in-memory A/B, paired `*Vanilla`/`*Greased`
@@ -126,12 +130,30 @@ both proof and regression guard.
 
 Roughly highest-leverage first.
 
-1. **Events dispatcher tier (#51184).** Not yet measured — the benchmarks wire no
-   dispatcher, so model events are no-ops. Real apps always have one; every hydrated
-   row fires `retrieved`, every save fires 4 events, and the stock dispatcher does
-   avoidable work even with zero listeners. This is a *different axis* (the
-   dispatcher is a global singleton, so stock-vs-optimized is a separate A/B, not
-   per-model). Porting it makes the benchmarks more faithful AND adds a tier.
+1. **Events dispatcher tier (#51184).** ✅ **Harness now faithful** — the benches boot
+   with a real stock dispatcher (`BootsEloquent`), so events fire. **Now measured**
+   (the honest envelope, before building anything):
+   - `retrieved` dispatch with **zero listeners ≈ 1.5 µs/row**; a `save()`'s ~4 events
+     ≈ **7 µs/save** (~1.77 µs/event). Roughly **constant** w.r.t. the number of
+     *unrelated* registered listeners (1.5→1.7 µs from 0→20 wildcards — Laravel's
+     wildcard matching doesn't balloon). Only many `eloquent.*`-matching wildcards
+     would change that.
+   - Wiring it barely moved the macro (index_users −73.3% → −72.4%) because dispatch
+     is cheap *and* vanilla + greased pay it equally (the dispatcher is a global
+     singleton — a *different axis* than the per-model tiers).
+   - **Tier upside** = letting a greased model **skip the dispatch when there's no
+     listener for that specific event**, recovering ~1.5 µs/row on reads (~5% of a
+     greased read request) + ~7 µs/save on writes. Real and it stacks, but **modest —
+     not a date-tier headline.** Fits the portfolio thesis ("marginal in isolation,
+     compounds bundled") exactly.
+   - **Design + risk:** override `fireModelEvent` to short-circuit when
+     `hasListeners("eloquent.{$event}: ".static::class)` is false, cached per
+     class+event in the blueprint. The catch is runtime mutation — observers/listeners
+     can be registered *after* the cache is built (and `$dispatchesEvents`, booted
+     observers, global `eloquent.*` wildcards all count) — so it needs divergence
+     detection or a conservative "any dispatcher-level change → recheck" guard. Get
+     this wrong and you silently drop a real event: the parity bar here is behavioral
+     (did the listener fire?), not just byte-output.
 2. **Date-cast round-trip elimination.** ✅ **DONE for timestamps** — Tier 4
    (`HasGreasedSerialization`). The headline insight from building it: the *default*
    `serializeDate` (`toJSON`) does **not** produce the stored string — `2026-01-01

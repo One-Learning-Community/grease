@@ -15,15 +15,14 @@
 
 require __DIR__.'/../vendor/autoload.php';
 
+use Grease\Bench\Support\BootsEloquent;
 use Grease\Concerns\HasGrease;
-use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 
-$capsule = new Capsule;
-$capsule->addConnection(['driver' => 'sqlite', 'database' => ':memory:']);
-$capsule->setAsGlobal();
-$capsule->bootEloquent();
+// Boots Eloquent with a real stock event dispatcher wired in, so model events
+// actually fire — the work a real endpoint does. See BootsEloquent.
+$capsule = BootsEloquent::capsule();
 $schema = $capsule->schema();
 
 $schema->create('users', function (Blueprint $t) {

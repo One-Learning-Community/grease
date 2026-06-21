@@ -2,12 +2,12 @@
 
 namespace Grease\Bench;
 
+use Grease\Bench\Support\BootsEloquent;
 use Grease\Tests\Fixtures\GreasedDatetimeCast;
 use Grease\Tests\Fixtures\GreasedTimestamps;
 use Grease\Tests\Fixtures\SampleData;
 use Grease\Tests\Fixtures\VanillaDatetimeCast;
 use Grease\Tests\Fixtures\VanillaTimestamps;
-use Illuminate\Database\Capsule\Manager as Capsule;
 use PhpBench\Attributes\BeforeMethods;
 use PhpBench\Attributes\Iterations;
 use PhpBench\Attributes\RetryThreshold;
@@ -37,8 +37,6 @@ use RuntimeException;
 ]
 class DateSerializationBench
 {
-    private static bool $booted = false;
-
     private VanillaTimestamps $vanilla;
 
     private GreasedTimestamps $greased;
@@ -51,13 +49,7 @@ class DateSerializationBench
     {
         date_default_timezone_set('UTC');
 
-        if (! self::$booted) {
-            $capsule = new Capsule;
-            $capsule->addConnection(['driver' => 'sqlite', 'database' => ':memory:']);
-            $capsule->setAsGlobal();
-            $capsule->bootEloquent();
-            self::$booted = true;
-        }
+        BootsEloquent::capsule();
 
         $this->vanilla = (new VanillaTimestamps)->newFromBuilder(SampleData::timestampsRow());
         $this->greased = (new GreasedTimestamps)->newFromBuilder(SampleData::timestampsRow());
