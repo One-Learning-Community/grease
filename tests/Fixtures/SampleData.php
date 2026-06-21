@@ -39,4 +39,37 @@ class SampleData
             'updated_at' => '2026-01-01 00:00:00',
         ];
     }
+
+    /**
+     * A minimal timestamps-only row (two distinct, non-midnight timestamps) shared
+     * by the Tier 4 parity test and the date-serialization bench, so the bench
+     * times exactly the round-trip a test proves byte-identical.
+     *
+     * @return array<string, mixed>
+     */
+    public static function timestampsRow(): array
+    {
+        return [
+            'id' => 1,
+            'name' => 'widget',
+            'created_at' => '2026-03-04 09:10:11',
+            'updated_at' => '2024-12-31 23:59:59',
+        ];
+    }
+
+    /**
+     * A row for the two plain datetime casts, shared by the Tier 4 cast-path parity
+     * test and bench so the bench times exactly the cast round-trip a test proves
+     * byte-identical.
+     *
+     * @return array<string, mixed>
+     */
+    public static function datetimeCastRow(): array
+    {
+        return [
+            'id' => 1,
+            'published_at' => '2026-03-04 09:10:11',
+            'archived_at' => '2024-12-31 23:59:59',
+        ];
+    }
 }

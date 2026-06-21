@@ -1,0 +1,234 @@
+<?php
+
+namespace Grease\Concerns;
+
+use Closure;
+
+/**
+ * Tier 4 — date serialization round-trip elimination.
+ *
+ * Eloquent serializes every `getDates()` column (the built-in `created_at` /
+ * `updated_at` timestamps) by parsing the stored driver string into a Carbon
+ * instance and formatting it straight back out:
+ *
+ *     $attributes[$key] = $this->serializeDate($this->asDateTime($value));
+ *
+ * For the overwhelmingly common configurations that Carbon trip is pure
+ * ceremony — the output is a deterministic rewrite of the input string:
+ *
+ *   - **identity** — a model whose `serializeDate()` emits the storage format
+ *     (`format('Y-m-d H:i:s')`, a frequent API choice): output === stored string.
+ *   - **utc_iso** — the *default* `serializeDate()` (`toJSON()`) under a zero-offset
+ *     timezone (Laravel's own default is UTC): `2026-01-01 00:00:00` becomes
+ *     `2026-01-01T00:00:00.000000Z`, i.e. `strtr($v,' ','T').'.000000Z'` — no
+ *     timezone math, no Carbon needed.
+ *
+ * THE NARROWING (why this is safe, asserted in tests): we never reimplement
+ * Carbon's formatting blind. The per-class strategy is chosen by *probing the
+ * model's real `serializeDate(asDateTime(...))`* against representative values and
+ * adopting a fast path **only when it is byte-for-byte equal** to vanilla. Anything
+ * the probe doesn't certify — a non-UTC zone under the default formatter, a custom
+ * `dateFormat`, a value that isn't a plain second-precision string (Carbon instance,
+ * date-only, sub-second precision) — defers to the exact vanilla composition. The
+ * plan is keyed by timezone + connection so it can never go stale when either
+ * changes.
+ *
+ * The same treatment covers `datetime` / `immutable_datetime` *casts* (the
+ * `published_at => 'datetime'` shape) in `addCastAttributesToArray`: certified keys
+ * are rewritten in place and handed to `parent::` on the skip-list, so every other
+ * cast — custom-format datetime, `date`, enum, class-castable, the lot — flows
+ * through the framework's own logic untouched. Each cast type is probe-certified
+ * independently; uncertified ones defer.
+ */
+trait HasGreasedSerialization
+{
+    use InteractsWithGreaseBlueprint;
+
+    /** A plain second-precision storage timestamp — the only shape the fast path handles. */
+    private const GREASE_DATE_SHAPE = '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/';
+
+    /** Representative values used to certify a class's serialize strategy. */
+    private const GREASE_DATE_PROBES = [
+        '2026-01-01 00:00:00',
+        '2026-03-04 09:10:11',
+        '2024-12-31 23:59:59',
+        '1999-02-28 07:08:09',
+        '2020-06-15 13:45:30',
+    ];
+
+    protected function addDateAttributesToArray(array $attributes)
+    {
+        $plan = $this->greaseDateSerializePlan();
+
+        if ($plan === false) {
+            // Class not certified for a fast path (e.g. non-UTC default formatter,
+            // custom dateFormat) — exactly vanilla.
+            return parent::addDateAttributesToArray($attributes);
+        }
+
+        foreach ($this->getDates() as $key) {
+            if ($key === null || ! isset($attributes[$key])) {
+                continue;
+            }
+
+            $value = $attributes[$key];
+
+            // Fast path only for a raw, second-precision storage string. A Carbon
+            // instance, a date-only value, or sub-second precision falls through to
+            // the byte-for-byte vanilla composition below.
+            if (is_string($value) && preg_match(self::GREASE_DATE_SHAPE, $value) === 1) {
+                $attributes[$key] = $plan === 'utc_iso'
+                    ? strtr($value, ' ', 'T').'.000000Z'
+                    : $value; // 'identity'
+
+                continue;
+            }
+
+            $attributes[$key] = $this->serializeDate($this->asDateTime($value));
+        }
+
+        return $attributes;
+    }
+
+    protected function addCastAttributesToArray(array $attributes, array $mutatedAttributes)
+    {
+        // Live casts (so a runtime-diverged instance is always correct, never the
+        // class baseline). Only the two plain datetime cast types are eligible —
+        // custom-format datetime, `date`, `timestamp`, enum, class-castable, etc.
+        // all fall to vanilla below.
+        $fast = [];
+
+        foreach ($this->getCasts() as $key => $type) {
+            if (($type !== 'datetime' && $type !== 'immutable_datetime')
+                || ! array_key_exists($key, $attributes)
+                || in_array($key, $mutatedAttributes, true)) {
+                continue;
+            }
+
+            $value = $attributes[$key];
+
+            if (! is_string($value) || preg_match(self::GREASE_DATE_SHAPE, $value) !== 1) {
+                continue;
+            }
+
+            $rewrite = $this->greaseDateCastRewrite($type);
+
+            if ($rewrite === false) {
+                continue;
+            }
+
+            $attributes[$key] = $rewrite($value);
+            $fast[] = $key;
+        }
+
+        // Hand the rewritten keys to vanilla on the skip-list, so every other cast
+        // is processed by the framework's own logic, byte-for-byte.
+        return parent::addCastAttributesToArray(
+            $attributes,
+            $fast === [] ? $mutatedAttributes : array_merge($mutatedAttributes, $fast),
+        );
+    }
+
+    /**
+     * The certified serialize strategy for this class under the live timezone and
+     * connection: 'identity', 'utc_iso', or false (defer to vanilla). Keyed by
+     * timezone + connection because the default-formatter rewrite is only valid at
+     * a zero offset and the storage format is connection-scoped.
+     *
+     * @return 'identity'|'utc_iso'|false
+     */
+    protected function greaseDateSerializePlan(): string|false
+    {
+        $tz = date_default_timezone_get();
+        $conn = $this->getConnectionName() ?? '@default';
+
+        return static::$greaseBlueprint[static::class]['dateSerialize'][$tz][$conn]
+            ??= $this->greaseBuildDateSerializePlan();
+    }
+
+    /**
+     * Certify a fast path for this class by probing its real serialize composition.
+     * Returns a strategy only when every probe round-trips byte-identically.
+     *
+     * @return 'identity'|'utc_iso'|false
+     */
+    protected function greaseBuildDateSerializePlan(): string|false
+    {
+        // Only the standard second-precision driver format is eligible; a custom
+        // format may carry precision/width the probe shape doesn't represent.
+        if ($this->getDateFormat() !== 'Y-m-d H:i:s') {
+            return false;
+        }
+
+        $identity = true;
+        $utcIso = true;
+
+        foreach (self::GREASE_DATE_PROBES as $probe) {
+            $real = $this->serializeDate($this->asDateTime($probe));
+
+            $identity = $identity && $real === $probe;
+            $utcIso = $utcIso && $real === strtr($probe, ' ', 'T').'.000000Z';
+        }
+
+        return $identity ? 'identity' : ($utcIso ? 'utc_iso' : false);
+    }
+
+    /**
+     * The certified raw-string rewrite for a `datetime`/`immutable_datetime` cast
+     * under the live timezone + connection, or false to defer to vanilla. Cached
+     * per cast type, since the immutable variant could in principle serialize
+     * differently from the mutable one.
+     */
+    protected function greaseDateCastRewrite(string $type): Closure|false
+    {
+        $tz = date_default_timezone_get();
+        $conn = $this->getConnectionName() ?? '@default';
+
+        return static::$greaseBlueprint[static::class]['dateCast'][$tz][$conn][$type]
+            ??= $this->greaseBuildDateCastRewrite($type);
+    }
+
+    /**
+     * Certify a Carbon-free rewrite for a datetime cast type by probing its real
+     * cast-then-serialize composition. Returns the first candidate rewrite that
+     * reproduces it on every probe, or false when none does (custom serializer
+     * under a non-zero offset, a custom `dateFormat`, etc.).
+     */
+    protected function greaseBuildDateCastRewrite(string $type): Closure|false
+    {
+        if ($this->getDateFormat() !== 'Y-m-d H:i:s') {
+            return false;
+        }
+
+        // Mirrors what addCastAttributesToArray feeds to serializeDate for this cast
+        // type (castAttribute's date branch + the serializeDate post-step).
+        $real = match ($type) {
+            'datetime' => fn (string $raw): string => $this->serializeDate($this->asDateTime($raw)),
+            'immutable_datetime' => fn (string $raw): string => $this->serializeDate($this->asDateTime($raw)->toImmutable()),
+            default => null,
+        };
+
+        if ($real === null) {
+            return false;
+        }
+
+        // Same two strategies as the timestamp path: UTC-default ISO, or a
+        // storage-format serializeDate (identity).
+        $candidates = [
+            static fn (string $raw): string => strtr($raw, ' ', 'T').'.000000Z',
+            static fn (string $raw): string => $raw,
+        ];
+
+        foreach ($candidates as $candidate) {
+            foreach (self::GREASE_DATE_PROBES as $probe) {
+                if ($real($probe) !== $candidate($probe)) {
+                    continue 2;
+                }
+            }
+
+            return $candidate;
+        }
+
+        return false;
+    }
+}
