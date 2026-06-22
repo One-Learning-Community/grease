@@ -7,3 +7,7 @@
 .DS_Store
 .idea/
 .phpunit.result.cache
+
+# Local AI agent context — kept out of the repo on purpose.
+/CLAUDE.md
+/CLAUDE.local.md

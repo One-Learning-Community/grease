@@ -168,3 +168,9 @@ PHP 8.2+, Laravel 12/13.
 ## License
 
 MIT.
+
+## Built with Claude
+
+Grease was built proudly in collaboration with [Claude](https://claude.com/claude-code)
+— a small proof of what a strong engineering mindset and AI can do together: measure
+first, keep the parity spine honest, and ship the wins core couldn't.
