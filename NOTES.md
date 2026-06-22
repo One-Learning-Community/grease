@@ -66,8 +66,23 @@ both proof and regression guard.
   Eloquent's static dispatcher at the greased one.
 - `Support/WildcardPattern.php` — pre-compiled wildcard regex (reproduces `Str::is`),
   used by the dispatcher so wildcard matching isn't recompiled per call.
+- `View/*` — **the Blade render tier**, a *third axis* (like the dispatcher: not a model
+  trait). Opt-in via `View/GreaseViewServiceProvider.php` (binds a faster `blade.compiler`;
+  NOT auto-discovered). Two greased hot paths, both byte-identical:
+  - `View/Compiler.php` + `View/Props.php` — the `@props` emit. Vanilla's per-render block
+    (flat name list + `in_array`, declaration eval'd twice, `get_defined_vars()` scope
+    snapshot) collapses to one `Props::mergeAttributes()` call (name set memoized per
+    compile-time site) + a tight `$$key = $value` bind loop. `Compiler::fromBase()`
+    reflection-clones the base compiler for a transparent swap.
+  - `View/ComponentAttributeBag.php` — the `$attributes->merge([...])` nearly every
+    component runs. Vanilla's Collection pipeline (`partition`/`mapWithKeys`/`->merge`/
+    `->all`, ~5 Collection allocs/render) becomes two plain `foreach` loops. Subclasses the
+    base bag (so every framework `instanceof ComponentAttributeBag` still holds — e.g.
+    `sanitizeComponentAttribute`'s no-escape guard for forwarded bags); `Props` hands the
+    component its surviving `$attributes` as this subclass and `merge()` returns
+    `new static`, so the fast path stays live down any chain.
 
-### Tests (`tests/`) — 198 tests / 522 assertions, green on real Laravel
+### Tests (`tests/`) — green on real Laravel
 - `CastParityTest` — every cast type × read + type-identity + `toArray` + all-null;
   encrypted deferral; enum/custom-class.
 - `CastEquivalenceParityTest` — the ported cast-objects ~40-case differential matrix
@@ -95,6 +110,13 @@ both proof and regression guard.
 - `Fixtures/` — `SampleData` (the shared raw row), `Vanilla*`/`Greased*` model
   pairs, `Status` enum, `UpperCast`, `DefinesSampleCasts` (cast map via the `casts()`
   method — a trait can't redeclare `Model::$casts`).
+- `ViewPropsParityTest` — Blade `@props`: compiles each declaration both ways, executes
+  the emitted PHP, asserts identical prop locals + surviving attributes (incl. the kebab-
+  alias junk local); plus emit-shape and per-site memo-key assertions.
+- `ComponentAttributeBagMergeParityTest` — Blade `merge()`: A/B vanilla-vs-greased
+  `getAttributes()` + `__toString()` across 14 scenarios (class/style append, `Str::finish`
+  `;`, `AppendableAttributeValue`, escaping, `escape=false`, ordering, de-dup), plus the
+  `sanitizeComponentAttribute` forwarded-bag guard (a standalone reimpl would be e()'d).
 
 ### Benchmarks (`benchmarks/`)
 - `Bench/Support/BootsEloquent.php` — shared Capsule boot for every bench, **with a
@@ -119,6 +141,14 @@ both proof and regression guard.
 - `Bench/SuiteBench.php` + `Bench/Support/DrivesTestSuite.php` — phpbench-via-phpunit
   bridge: drives each no-arg `test*` of `SqlRoundtripTest` as a subject through a
   booted Testbench app (skips `tearDown` — it fatals under the phpbench runtime).
+- `blade.php` — **the Blade macro**: Taylor's 1,000-anonymous-component challenge, two
+  booted Testbench apps (vanilla vs greased compiler, separate compiled-view caches),
+  HTML asserted byte-identical before timing, on a simple and a rich avatar. Doubles as
+  the render-parity gate.
+- `blade_profile.php` + `cachegrind_top.php` — the **measure-first** companions to the
+  macro: a single-arm greased render under Xdebug's profiler, then a self-time/call-count
+  ranking of the cachegrind. How the `merge` lever was found (~9 Collection allocs/render);
+  the tools for the next levers (require/extract machinery, component resolution).
 
 ### Infra
 - `.github/workflows/tests.yml` — PHP 8.2–8.5 × Laravel 11/12/13 (matched Testbench),
@@ -126,6 +156,10 @@ both proof and regression guard.
 - `composer.json` scripts: `test`, `bench`, `bench:suite`.
 
 ### Measured results
+- Blade render tier (`blade.php`, 1,000 anonymous components, parity ✔, Xdebug-inflated
+  but A/B): with `@props` only, simple −14.2% / rich −14.5%; **adding the greased
+  `merge()`: simple −26.6%, rich −24.5%.** ~half the per-render cost is still vanilla
+  (require/extract machinery + component resolution) — see Open/to-explore #10.
 - Real endpoints (end-to-end incl. SQL, vanilla → greased), **with Tier 4 (timestamps
   + datetime casts)**: posts_with_author −74.9%, index_users −73.3%, show_post −46.8%,
   bulk_update −19.1%. (Pre-Tier-4: −16.4% / −16.9% / −10.0% / −14.4%. The two read
@@ -284,6 +318,32 @@ Roughly highest-leverage first.
 9. **NOT worth it:** a per-class read-dispatch `plan[key]→kind` overriding
    `getAttribute`. `toArray` uses `addCastAttributesToArray`, not `getAttribute`, so
    it wouldn't help the serialization-heavy path — limited upside for real risk.
+10. **Blade render tier (Taylor's 1,000-component challenge).** ✅ **Two clean wins
+    shipped**, both byte-identical and macro-gated (`blade.php`):
+    - ✅ **`@props` emit** (`Compiler` + `Props`): one memoized `mergeAttributes()` call +
+      a tight bind loop, replacing the flat-name-list / double-eval / scope-snapshot block.
+      −14%. The lesson: the win wasn't `in_array`→`isset` (~−4-5%), it was killing the
+      *structural* multi-pass over attributes.
+    - ✅ **`ComponentAttributeBag::merge()`** (greased subclass): Collection pipeline →
+      two `foreach` loops, no allocations. Found by profiling — `merge` was the single
+      biggest Collection source (~5 of ~9 allocs/render). Got the macro to **−25%**.
+    - **Profile (`blade_profile.php` + `cachegrind_top.php`, Xdebug-inflated, ~10% one-time
+      boot excluded):** no single big lever; cost splits ≈ `merge`+Collection churn ~15%
+      (now greased), per-render `require` + `extract($__data)` machinery (the Filesystem
+      closure) ~16%, Factory/resolution (`renderComponent`/`make`/`componentData`/
+      `Component::resolve`) ~15%, the `Str::of()` initials chain ~5% (user content — off
+      limits). Halving needs the next two, both framework-internal and riskier:
+    - **Open #1 — the require/extract machinery (~16%).** The compiled view is `require`d
+      from a file on *every* render and `extract($__data)` rebuilds locals each time. Lever:
+      override the view engine so a component compiles once to a cached closure (skip the
+      per-render stat + re-extract). Deep — `extract` semantics (EXTR_SKIP, scope) must
+      match byte-for-byte.
+    - **Open #2 — component resolution (~15%).** `AnonymousComponent::resolve` + the Factory
+      machinery run a per-render factory/resolver lookup. Lever: cache resolution per
+      component name. Behaviour-identical bar; the risk is shared-state bleed between
+      components (the macro already flushes `Component` statics between arms — instructive).
+    - Parity stays macro (byte-identical HTML) + execution tests; measure-first via the
+      kept profiling tools. **This is the rabbit hole.**
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green

@@ -4,6 +4,7 @@ namespace Grease\Tests;
 
 use Grease\View\ComponentAttributeBag as GreasedBag;
 use Illuminate\View\ComponentAttributeBag as VanillaBag;
+use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -54,6 +55,32 @@ class ComponentAttributeBagMergeParityTest extends TestCase
     {
         // merge() returns `new static`, so the fast path stays live down any chain.
         $this->assertInstanceOf(GreasedBag::class, (new GreasedBag(['class' => 'a']))->merge(['class' => 'b']));
+    }
+
+    public function test_greased_bag_is_recognized_as_a_component_attribute_bag(): void
+    {
+        // A bag forwarded as an attribute *value* (a parent passing `$attributes` down to
+        // a nested component) must pass through sanitizeComponentAttribute() untouched —
+        // not escaped/stringified like a generic Stringable. The framework guards that with
+        // `! $value instanceof ComponentAttributeBag` (CompilesComponents::sanitize-
+        // ComponentAttribute), which our subclass satisfies precisely because it `extends`
+        // the base. A standalone reimplementation would be e()'d here and diverge.
+        $greased = new GreasedBag(['class' => 'mt-4']);
+        $vanilla = new VanillaBag(['class' => 'mt-4']);
+
+        $this->assertInstanceOf(VanillaBag::class, $greased);
+        $this->assertSame($greased, BladeCompiler::sanitizeComponentAttribute($greased));
+        $this->assertSame($vanilla, BladeCompiler::sanitizeComponentAttribute($vanilla));
+
+        // Control: a plain Stringable IS escaped — proving the guard above is load-bearing.
+        $stringable = new class
+        {
+            public function __toString(): string
+            {
+                return '<b>x</b>';
+            }
+        };
+        $this->assertSame('&lt;b&gt;x&lt;/b&gt;', BladeCompiler::sanitizeComponentAttribute($stringable));
     }
 
     /** @return array<string, array{0: array<string, mixed>, 1: array<string, mixed>, 2?: bool}> */
