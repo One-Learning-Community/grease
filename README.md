@@ -27,6 +27,11 @@ or extend the base model:
 class User extends \Grease\GreasedModel { /* ... */ }
 ```
 
+Two further opt-in strands go beyond the model trait, on their own axes: a drop-in
+[faster event dispatcher](#beyond-eloquent-a-faster-event-dispatcher) and a
+[faster Blade component render](#beyond-eloquent-faster-blade-components). Same rule
+throughout — behaviour/byte-identical to vanilla, opt in only where you want it.
+
 ## Why this exists
 
 Eloquent re-derives class-pure facts on *every* attribute access and *every*
@@ -216,6 +221,43 @@ non-trivial wildcard listeners (model observers, package patterns) are registere
 through a `hasListeners()` guard that the greased dispatcher memoizes, so re-rendering the
 same components stops re-scanning wildcards every time — the win there compounds with the
 render itself, though the exact figure depends on how many observers you register.
+
+## Beyond Eloquent: faster Blade components
+
+The third strand is the Blade render path. It starts with a [tweet Taylor posted in April
+2024](https://x.com/taylorotwell/status/1781039378376146970):
+
+> Sometimes I get obsessed with figuring out if Blade component rendering performance can be
+> supercharged. Rendering 1,000 anonymous components takes about 14ms on my MBP. Can we cut
+> this in half? 🤔 Dig in and help me figure it out?
+
+We've been chewing on *reliably* trimming that number ever since — on and off for two years.
+"Reliably" is the hard part: it's easy to shave a render by changing what it emits; the bar
+here is the same as everywhere else in Grease — **byte-identical output**, asserted before any
+number is timed. Honest scope, too: this is **one challenge of limited breadth**, not a Blade
+overhaul. We greased the two hot paths *every* component pays on *every* render:
+
+- **`@props` resolution** — vanilla rebuilds a name list, `in_array`-scans it, evaluates the
+  declaration twice, and snapshots the whole scope with `get_defined_vars()` on each render.
+  Grease compiles it to one memoized call plus a tight bind loop.
+- **`$attributes->merge([...])`** — vanilla runs it through the Collection pipeline (~5
+  allocations a render); Grease does the identical partition + append in two `foreach` loops.
+
+Opt in with the (not auto-discovered) provider, which swaps the `blade.compiler`; components
+recompile to the tighter form on next change, or immediately after `view:clear`:
+
+```php
+// bootstrap/providers.php, or the providers array in config/app.php
+Grease\View\GreaseViewServiceProvider::class,
+```
+
+On Taylor's exact challenge — 1,000 anonymous components, output asserted identical — that
+lands **−38%** on a simple component and **−29.5%** on a rich one (Linux, `benchmarks/docker`;
+`benchmarks/blade.php`). Not the halving he asked for: the rest of a render is the compiled
+template executing and the per-component resolution machinery, and we haven't yet found a
+*clean, parity-safe* win in that machinery (we've measured several and rejected them — see
+[NOTES.md](NOTES.md)). So: two years on, what we'll stand behind is reliably about a third
+off, byte-for-byte — and the harness is right there if you want to chase the other half.
 
 ## Benchmarks
 
