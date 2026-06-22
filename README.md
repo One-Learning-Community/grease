@@ -50,6 +50,13 @@ framework. Grease is where this work lives now.
 
 ## Benchmarks
 
+> *"I only trust a benchmark I've falsified myself."* — not Churchill
+>
+> So don't take ours. Every number below ships with the harness that made it: `docker build
+> -t grease-bench benchmarks/docker && docker run --rm -v "$PWD":/app -w /app grease-bench php
+> benchmarks/realworld.php`. Swap in `Dockerfile.alpine` for musl, your own base image for
+> your libc/allocator, your own silicon — and read what *your* build actually does.
+
 In-memory SQLite, real queries, controller-shaped workloads — **end-to-end per
 request, including SQL.** Vanilla Eloquent vs. the same models with `HasGrease`.
 Output is byte-identical (asserted across every cast type and workload). Measured on
