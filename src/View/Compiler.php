@@ -66,7 +66,8 @@ class Compiler extends BladeCompiler
 
         return "<?php \$attributes ??= new \\Illuminate\\View\\ComponentAttributeBag;
 
-\$__propNames = \\Grease\\View\\Props::names('{$site}', {$expression});
+\$__data = {$expression};
+[\$__propNames, \$__propDefaults] = \\Grease\\View\\Props::resolve('{$site}', \$__data);
 
 \$__newAttributes = [];
 
@@ -80,10 +81,7 @@ foreach (\$attributes->all() as \$__key => \$__value) {
 
 \$attributes = new \\Illuminate\\View\\ComponentAttributeBag(\$__newAttributes);
 
-unset(\$__propNames);
-unset(\$__newAttributes);
-
-foreach (array_filter({$expression}, 'is_string', ARRAY_FILTER_USE_KEY) as \$__key => \$__value) {
+foreach (\$__propDefaults as \$__key => \$__value) {
     \$\$__key = \$\$__key ?? \$__value;
 }
 
@@ -91,6 +89,6 @@ foreach (\$attributes->all() as \$__key => \$__value) {
     unset(\$\$__key);
 }
 
-unset(\$__key, \$__value); ?>";
+unset(\$__data, \$__propNames, \$__propDefaults, \$__newAttributes, \$__key, \$__value); ?>";
     }
 }

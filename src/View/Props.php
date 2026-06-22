@@ -5,73 +5,92 @@ namespace Grease\View;
 use Illuminate\Support\Str;
 
 /**
- * The prop-name resolution for Blade's `@props`, hoisted out of the per-render hot
- * path. Vanilla compiles `@props` to a fresh `ComponentAttributeBag::extractPropNames()`
- * call every render — building a flat name list that is then fed, key by key, to
- * `in_array()` (O(props × attributes)). Both halves are wasteful: the name set is a
- * compile-time constant, and a list forces a linear scan where a keyed set gives O(1).
+ * The `@props` resolution Blade hand-inlines into every compiled component, lifted into
+ * one helper. Vanilla's emit is wasteful three ways on the per-render hot path: it
+ * rebuilds a flat name list (`ComponentAttributeBag::extractPropNames`) and scans it
+ * with `in_array` (O(props × attributes)); it evaluates the whole `@props` array
+ * literal *twice* (once for the names, once for `array_filter(..., 'is_string')` to find
+ * the defaults); and it snapshots the entire scope with `get_defined_vars()` to unset
+ * attribute-named locals.
  *
- * {@see \Grease\View\Compiler::compileProps()} emits a call here instead, passing a
- * stable per-`@props`-site id. The keyed `[name => true]` map is built once per site
- * and reused across every render of that component — so a Livewire page re-rendering
- * the same components pays the build once, not once per render.
+ * {@see \Grease\View\Compiler::compileProps()} evaluates the declaration once and calls
+ * {@see resolve()}, which returns both halves it needs:
+ *   - **names** — the keyed `[name => true]` set for O(1) `isset()` partitioning,
+ *     memoized per `@props` site (a compile-time constant);
+ *   - **defaults** — the string-keyed subset of the declaration, with *fresh* values
+ *     (defaults can be runtime expressions) but using the cached key-structure, so the
+ *     `is_string` key walk is paid once per site, not once per render.
  *
- * Byte-for-byte, the membership set is identical to what `extractPropNames()` produces
- * (every name, plus its kebab alias), only shaped as a set for `isset()` instead of a
- * list for `in_array()`. The parity suite asserts the compiled block resolves the same
- * props and the same surviving attributes as vanilla.
+ * The membership set is byte-identical to `extractPropNames` (every name plus its kebab
+ * alias), only shaped as a set; the defaults are exactly what `array_filter(decl,
+ * 'is_string', ARRAY_FILTER_USE_KEY)` produces. The compiler still binds the locals
+ * inline (a helper can't write its caller's scope, and `extract()` skips non-identifier
+ * keys like `icon-name`). The parity suite asserts the compiled block resolves the same
+ * props and leaves the same attributes as vanilla.
  */
 class Props
 {
     /**
-     * Keyed prop-name maps, memoized per compiled `@props` site.
+     * Per-site analysis of an `@props` declaration: the keyed name set, and the set of
+     * string keys (the ones that carry defaults). Both are compile-time constants for a
+     * given site, so they're built once and reused across every render of the component.
      *
-     * @var array<string, array<string, true>>
+     * @var array<string, array{names: array<string, true>, stringKeys: array<string, true>}>
      */
-    protected static array $maps = [];
+    protected static array $meta = [];
 
     /**
-     * The keyed prop-name set for one `@props` declaration, built once per site.
+     * Resolve a declaration into its partition name set and its default map.
      *
      * @param  string  $site  stable id for this `@props` location (compile-time constant)
-     * @param  array<array-key, mixed>  $declaration  the `@props` array, names as keys
-     *                                  (or values, for list-style entries)
-     * @return array<string, true>
+     * @param  array<array-key, mixed>  $declaration  the `@props` array (one evaluation)
+     * @return array{0: array<string, true>, 1: array<array-key, mixed>}
      */
-    public static function names(string $site, array $declaration): array
+    public static function resolve(string $site, array $declaration): array
     {
-        return static::$maps[$site] ??= static::build($declaration);
+        $meta = static::$meta[$site] ??= static::analyze($declaration);
+
+        // Defaults carry the declaration's *current* values (which may be runtime
+        // expressions), filtered to the string keys via the cached structure — no
+        // per-render is_string walk, and no second evaluation of the declaration.
+        return [$meta['names'], array_intersect_key($declaration, $meta['stringKeys'])];
     }
 
     /**
-     * Build the set: each prop name and its kebab alias mapped to true. Mirrors
-     * {@see \Illuminate\View\ComponentAttributeBag::extractPropNames()} — list-style
-     * keys take the value as the name — but emits a set and calls `Str::snake` once
-     * (`kebab` is just `snake($v, '-')`), letting the set dedupe collisions for free.
+     * Analyze a declaration's static shape: every prop name (plus kebab alias) as a
+     * lookup set, and which keys are string-keyed (i.e. carry a default). Mirrors
+     * `extractPropNames` — list-style keys take the value as the name — and calls
+     * `Str::snake` once (`kebab` is just `snake($v, '-')`), the set deduping collisions.
      *
      * @param  array<array-key, mixed>  $declaration
-     * @return array<string, true>
+     * @return array{names: array<string, true>, stringKeys: array<string, true>}
      */
-    protected static function build(array $declaration): array
+    protected static function analyze(array $declaration): array
     {
         $names = [];
+        $stringKeys = [];
 
         foreach ($declaration as $key => $default) {
-            $key = is_numeric($key) ? $default : $key;
+            if (is_numeric($key)) {
+                $name = $default;            // list-style: the value is the name
+            } else {
+                $name = $key;
+                $stringKeys[$key] = true;    // string-keyed: carries a default
+            }
 
-            $names[$key] = true;
-            $names[Str::snake($key, '-')] = true;
+            $names[$name] = true;
+            $names[Str::snake($name, '-')] = true;
         }
 
-        return $names;
+        return ['names' => $names, 'stringKeys' => $stringKeys];
     }
 
     /**
-     * Drop the memo. For tests that compile many throwaway `@props` sites; never
-     * needed in a running app (the maps are tiny and bounded by component count).
+     * Drop the memo. For tests that compile many throwaway `@props` sites; never needed
+     * in a running app (the maps are tiny and bounded by component count).
      */
     public static function flush(): void
     {
-        static::$maps = [];
+        static::$meta = [];
     }
 }
