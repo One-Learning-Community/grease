@@ -145,10 +145,13 @@ both proof and regression guard.
   booted Testbench apps (vanilla vs greased compiler, separate compiled-view caches),
   HTML asserted byte-identical before timing, on a simple and a rich avatar. Doubles as
   the render-parity gate.
-- `blade_profile.php` + `cachegrind_top.php` — the **measure-first** companions to the
-  macro: a single-arm greased render under Xdebug's profiler, then a self-time/call-count
-  ranking of the cachegrind. How the `merge` lever was found (~9 Collection allocs/render);
-  the tools for the next levers (require/extract machinery, component resolution).
+- `blade_excimer.php` — **the honest profiler**: a single-arm greased render under Excimer
+  (sampling, JIT-on), writing a speedscope flamegraph + a self-time ranking. Trust this for
+  self-time. Run with `-d xdebug.mode=off -d opcache.jit=tracing`.
+- `blade_profile.php` + `cachegrind_top.php` — the Xdebug companions. Useful for **call
+  counts** (how the `merge` lever was found, ~9 Collection allocs/render) but NOT self-time:
+  Xdebug disables JIT and over-attributes internal-op cost to the calling frame (it ranked
+  `extract` at ~14% when it's ~0.6%). Prefer `blade_excimer.php` for "where does time go."
 
 ### Infra
 - `.github/workflows/tests.yml` — PHP 8.2–8.5 × Laravel 11/12/13 (matched Testbench),
@@ -327,23 +330,39 @@ Roughly highest-leverage first.
     - ✅ **`ComponentAttributeBag::merge()`** (greased subclass): Collection pipeline →
       two `foreach` loops, no allocations. Found by profiling — `merge` was the single
       biggest Collection source (~5 of ~9 allocs/render). Got the macro to **−25%**.
-    - **Profile (`blade_profile.php` + `cachegrind_top.php`, Xdebug-inflated, ~10% one-time
-      boot excluded):** no single big lever; cost splits ≈ `merge`+Collection churn ~15%
-      (now greased), per-render `require` + `extract($__data)` machinery (the Filesystem
-      closure) ~16%, Factory/resolution (`renderComponent`/`make`/`componentData`/
-      `Component::resolve`) ~15%, the `Str::of()` initials chain ~5% (user content — off
-      limits). Halving needs the next two, both framework-internal and riskier:
-    - **Open #1 — the require/extract machinery (~16%).** The compiled view is `require`d
-      from a file on *every* render and `extract($__data)` rebuilds locals each time. Lever:
-      override the view engine so a component compiles once to a cached closure (skip the
-      per-render stat + re-extract). Deep — `extract` semantics (EXTR_SKIP, scope) must
-      match byte-for-byte.
-    - **Open #2 — component resolution (~15%).** `AnonymousComponent::resolve` + the Factory
-      machinery run a per-render factory/resolver lookup. Lever: cache resolution per
-      component name. Behaviour-identical bar; the risk is shared-state bleed between
-      components (the macro already flushes `Component` statics between arms — instructive).
-    - Parity stays macro (byte-identical HTML) + execution tests; measure-first via the
-      kept profiling tools. **This is the rabbit hole.**
+    - **⚠️ Measurement lesson — Xdebug's cachegrind self-times LIE.** `blade_profile.php` +
+      `cachegrind_top.php` ranked the per-render `require`/`extract($__data)` closure at ~14%
+      self. A micro-A/B proved real `extract` is **~0.6%** of a render — Xdebug overrides
+      `zend_execute_ex` (so JIT is off) and over-attributes internal-op cost to the calling
+      PHP frame. The CALL COUNTS were trustworthy (that's how `merge` was found); the
+      self-time **percentages** were not. **Use `blade_excimer.php` (Excimer, sampling,
+      JIT-on) for honest self-time.** Run benches with `-d xdebug.mode=off -d opcache.jit=tracing`.
+    - **❌ extract→bind-loop in getRequire: DEAD.** Tested two loops vs `extract(EXTR_SKIP)`
+      (pure-binding micro, JIT on): `extract` is a C builtin and ~2× faster than any userland
+      loop for ~12 vars (`get_defined_vars` snapshot loop +86%, skip-list loop +114%). The
+      realized full-render change was a +1.3% regression. `extract` is already optimal.
+    - **❌ isFile memoization: PARKED (modest + filesystem-risky).** Excimer flagged the
+      per-render `is_file()` existence stat at ~8%; memoizing positives on the view engine's
+      Filesystem (scoped, flushed on `terminating`) measured a clean **~6.5%** (isolation:
+      17.1 vs 18.5 ms). Dropped anyway: (a) caching `is_file` imposes a freshness assumption
+      PHP/Laravel deliberately leave to the OS/FS — NFS-without-caching deployments rely on
+      the re-stat; (b) that `is_file` is load-bearing for `CompilerEngine`'s recompile-on-
+      missing recovery. Not a clean-enough win for a zero-surprises package.
+    - **⚠️ Benching trap found the hard way:** a provider `boot()` that EAGER-resolves the
+      Blade engine captures the compiled-view path *before* a bench sets `view.compiled`,
+      breaking per-arm cache isolation and producing a bogus **−87%**. (Harmless in prod —
+      config is set before providers boot — but it poisons the macro. Keep view-tier wiring
+      in `register`/lazy, or set `view.compiled` before booting the provider in benches.)
+    - **Honest standing numbers (Excimer/clean, JIT on):** vanilla ~24 ms, greased compiler
+      (@props+merge) ~18.5 ms = **−24%** (confirms the shipped figure). Render self splits ≈
+      compiled-view body ~70% (mostly real work + the `Str::of` chain), then `e()`, `merge`,
+      `Component::resolve`, the Factory machinery.
+    - **Still open — component resolution (~15%, the real remaining lever).**
+      `AnonymousComponent::resolve` + the Factory run a per-render factory/resolver lookup.
+      Lever: cache resolution per component name. Behaviour-identical bar; risk is shared-
+      state bleed between components. This is the next thing to point Excimer at — measure
+      first, parity-gate via the macro. **The compiled-view body (~70%) is mostly genuine
+      work + user template content, not framework overhead we can grease.**
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
