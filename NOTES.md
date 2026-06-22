@@ -230,30 +230,58 @@ Roughly highest-leverage first.
    non-UTC default-`serializeDate` app gets nothing today; an offset-aware certified
    rewrite is possible but DST makes a single-probe generalization unsafe — would need
    careful per-offset probing.
-3. **Enum / custom-class / encrypted cast flyweights.** Currently deferred to
-   `parent::castAttribute` (correct, unaccelerated). The 14.x design has these
-   flyweights, but their comparators call helpers (`isClassComparable`,
-   `compareClassCastableAttribute`) that may not exist on vanilla Eloquent — port
-   carefully and self-contained.
-4. **Write / `fill` tier.** `fill(N)` is O(N·F): per-key `in_array` over fillable +
-   a `preg_grep` regex compile per key when guarded is a real list. A flipped
-   fillable lookup makes it O(N) — but prior art removed a *naive* fillable cache as
-   unsound (runtime `fillable()`/`guard()`/`$unguarded`), so it needs divergence
-   detection.
-5. **Hidden/visible flip caching** (would extend the existing Tier 4
-   `HasGreasedSerialization`). `getArrayableItems` rebuilds `array_flip(hidden/visible)`
-   ×3 per `toArray()`. Only helps models with hidden/visible set — bench fixtures
-   have none, so add fixtures first or it shows nothing. Full design + parity plan
-   in [SERIALIZATION-TIER.md](SERIALIZATION-TIER.md) (the value-compare approach, to
-   sidestep the `#[Hidden]`-attribute divergence trap). Much smaller than the date
-   win — likely a completeness add, not a headline.
-6. **Flyweight alias dedup.** Grease keys flyweights by raw cast type, so
-   `real`/`float`/`double` build 3 instances; 14.x collapsed them to 1 via a
-   canonical key. Minor memory, not correctness. Cheap to add if desired.
-7. **Persisted/precompiled blueprint** (a `model:cache`-style artisan flow) for
-   CLI cold-start. The current runtime-lazy cache is the right default (Octane-safe,
-   no staleness footgun); this is an optional add-on.
-8. **NOT worth it:** a per-class read-dispatch `plan[key]→kind` overriding
+3. **Enum / custom-class / encrypted cast flyweights.** ✅ **Enum DONE**
+   ([ENUM-CAST-TIER-RESEARCH.md](ENUM-CAST-TIER-RESEARCH.md)) — `HasGreasedCasts`
+   now has an enum fast path that *delegates* the conversion to the framework's own
+   `getEnumCastableAttributeValue()` (byte-identical, no probe) while skipping the
+   redundant `parent::` re-walk (2nd `getCastType`, encrypted probe, 14-arm switch,
+   `isEnumCastable`). Keyed by resolved type → divergence/STI-safe for free.
+   Measured **−56% on an enum-column read** (4.9→2.1 µs; read + `toArray` paths).
+   Dirty-tracking is a raw-scalar compare that never enters `castAttribute`, so it's
+   untouched — which also side-steps the `isClassComparable`/`compareClassCastableAttribute`
+   comparators (absent on L11/early-L12; never referenced). **Class-castable and
+   encrypted PARKED:** class-castable reads are already object-cached (gain ≈
+   first-read only, high parity surface) and encrypted reads are decryption-bound
+   (dispatch shave is noise).
+4. **Write / `fill` tier.** ⏸️ **PARKED** ([FILL-TIER-RESEARCH.md](FILL-TIER-RESEARCH.md)).
+   `fill(N)` is O(N·F) (per-key `in_array` over fillable + a `preg_grep` per key for a
+   real guarded list). A flipped lookup makes it O(N), and the divergence trap is
+   solvable — but measured **−0.2% (~0.6 µs)** for the recommended fillable-list shape
+   (inside noise), only **−5.2%** for the discouraged guarded-list shape, and `fill()`
+   is write-path only (hydration bypasses it). 1–2 orders below the shipped read tiers.
+   Build only as a completeness add or if a guarded-list-heavy write workload is targeted.
+5. **Hidden/visible flip caching** ⏸️ **PARKED — do not build**
+   ([HIDDEN-VISIBLE-TIER-RESEARCH.md](HIDDEN-VISIBLE-TIER-RESEARCH.md)). `getArrayableItems`
+   rebuilds `array_flip(hidden/visible)` per `toArray()`, but at realistic sizes (hidden=2)
+   the flip is ~130 ns and the recommended value-compare cache is **measurably slower than
+   vanilla** (−15% to −23%); the whole pair is ~0.4% of a `toArray`. This revises the
+   tentative "build if it clears noise" in [SERIALIZATION-TIER.md](SERIALIZATION-TIER.md) —
+   it doesn't clear noise, it regresses.
+6. **Flyweight alias dedup.** ✅ **DONE**
+   ([ALIAS-DEDUP-TIER-RESEARCH.md](ALIAS-DEDUP-TIER-RESEARCH.md)) — synonym cast types
+   (`real`/`float`/`double`, `integer`, `boolean`, `array`/`json:unicode`,
+   `custom_datetime`, `immutable_custom_datetime`) fold onto one canonical flyweight
+   key. Stateless flyweights + textually identical synonym closures → zero behavioural
+   change; `decimal` correctly excluded (carries a precision parameter). Honest
+   magnitude: tidiness, not speed (≤8 duplicate `ClosureCast`s, ~10 KB, once per
+   process) — folded in opportunistically alongside the enum work.
+7. **Persisted/precompiled blueprint** ⏸️ **PARKED**
+   ([PERSISTED-BLUEPRINT-TIER-RESEARCH.md](PERSISTED-BLUEPRINT-TIER-RESEARCH.md)). A
+   `model:cache`-style artifact for CLI cold-start, but the economics are inverted: of
+   the ~470 µs/class build, ~466 µs is tz/connection-keyed Carbon date-probes that
+   **can't** be safely persisted; the cleanly-persistable metadata builds in ~4.4 µs.
+   The blueprint also holds closures (`var_export`/`serialize` fail outright). And it'd
+   be the only footgun in the package that fails toward *wrong output* on staleness.
+   Runtime-lazy stays the right default.
+8. ✅ **`getCastType` memoization DONE** (not from the original list). `getCastType()`
+   is undocumented internal plumbing and a pure function of `getCasts()[$key]` (already
+   frozen per class by Tier 2) — yet it was re-walked live on every cast access. Now
+   cached per key in the blueprint, riding the existing divergence flag (no new branch).
+   Real subclass overrides shadow the trait method and stay live. Measured **~3–7 µs/row
+   on read, ~4 µs on `toArray`, ~7 µs on `setDirty`** (it's on the hottest path — every
+   cast access, plus the enum/custom-class deferral and dirty checks all call it);
+   `hydrate` (which doesn't cast) is flat, the control.
+9. **NOT worth it:** a per-class read-dispatch `plan[key]→kind` overriding
    `getAttribute`. `toArray` uses `addCastAttributesToArray`, not `getAttribute`, so
    it wouldn't help the serialization-heavy path — limited upside for real risk.
 

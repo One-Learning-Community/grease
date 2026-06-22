@@ -59,8 +59,11 @@ serialization-heavy API responses benefit most.
 Two narrow, obscure things change on a greased model's cast path. Custom casts
 ([`CastsAttributes`](https://laravel.com/docs/eloquent-mutators#custom-casts)), the
 documented extension point, **work unchanged** — and so does overriding
-`getCastType()`. The full cast contract is asserted byte-identical to vanilla in
-the test suite (every cast type × edge values × dirty-checking).
+`getCastType()` (a subclass override shadows the trait and stays fully live; the
+resolved type is otherwise memoized per class, like `getCasts()`). Enum casts are
+accelerated; class-castable and encrypted casts defer to vanilla, unaccelerated but
+byte-identical. The full cast contract is asserted byte-identical to vanilla in the
+test suite (every cast type × edge values × dirty-checking).
 
 1. **Per-instance `$casts` set in a constructor isn't supported.** The cast map is
    cached per class, so assigning a *different* `$casts` per instance inside a
@@ -101,8 +104,8 @@ models that don't use it.
 | Tier                    | What it memoizes / removes                                              |
 | ----------------------- | ----------------------------------------------------------------------- |
 | `HasGreasedHydration`   | per-row `ReflectionClass`, casts-array rebuild, redundant `newInstance` |
-| `HasGreasedAttributes`  | `getCasts` / `getDates` / mutator probes / `getDateFormat`              |
-| `HasGreasedCasts`       | per-access cast `switch` → resolved flyweights (see caveat)             |
+| `HasGreasedAttributes`  | `getCasts` / `getCastType` / `getDates` / mutator probes / `getDateFormat` |
+| `HasGreasedCasts`       | per-access cast `switch` → resolved flyweights, incl. an enum fast path (see caveat) |
 | `HasGreasedSerialization` | the Carbon parse-and-reformat round-trip for date serialization (timestamps + `datetime` casts), when a per-class probe proves the output is a byte-identical rewrite |
 
 ## Beyond Eloquent: a faster event dispatcher
