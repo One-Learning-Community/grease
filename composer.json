@@ -3,6 +3,11 @@
     "description": "Opt-in performance optimizations for Eloquent's hot path, built from optimizations declined upstream. Zero core changes, byte-identical output.",
     "keywords": ["laravel", "eloquent", "performance", "orm", "optimization"],
     "homepage": "https://github.com/One-Learning-Community/grease",
+    "support": {
+        "issues": "https://github.com/One-Learning-Community/grease/issues",
+        "source": "https://github.com/One-Learning-Community/grease",
+        "docs": "https://one-learning-community.github.io/grease/"
+    },
     "license": "MIT",
     "authors": [
         {
@@ -43,6 +48,5 @@
             "phpbench/phpbench": false
         }
     },
-    "minimum-stability": "dev",
     "prefer-stable": true
 }
