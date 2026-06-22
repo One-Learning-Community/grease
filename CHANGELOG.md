@@ -6,6 +6,13 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-22
+
+Two opt-in serialization helpers for code that builds its output array by hand
+(Scout `toSearchableArray`, a `JsonResource`, an export) and so bypasses the
+`attributesToArray()` date tier. Both are byte-identical to a named vanilla
+expression; the parity suite grows to 225 tests.
+
 ### Added
 
 - **`greaseSerializeDate(string $key): ?string`** on `HasGreasedSerialization` — the
@@ -61,5 +68,6 @@ dirty-check.
 - PHP 8.2+
 - Laravel 12 / 13
 
-[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/One-Learning-Community/grease/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/One-Learning-Community/grease/releases/tag/v0.1.0
