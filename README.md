@@ -186,7 +186,10 @@ Grease\Events\GreaseEventServiceProvider::class,
 ```
 
 It swaps the bound `events` singleton for the greased dispatcher (carrying over any
-already-registered listeners) and points Eloquent's dispatcher at it too. On an
+already-registered listeners) and points Eloquent's dispatcher at it too. Register it
+**first** in the array (or as early as practical): already-registered listeners are
+carried over either way, but going first means listeners other providers add land
+directly on the greased dispatcher and nothing has captured the original. On an
 event-dense request (a page render's worth of dispatches) this roughly **halves**
 the event overhead — ~−56% when most events have no listener, ~−47% per-request when
 non-trivial wildcard listeners (model observers, package patterns) are registered.

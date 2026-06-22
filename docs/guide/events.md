@@ -61,6 +61,14 @@ Registering the provider:
 - clears the `Event` facade's cached root,
 - and points Eloquent's static dispatcher at the greased one.
 
+**Register it first** in the providers array (or as early as practical). It is not a
+correctness requirement — listeners registered before the swap are carried over, and
+listeners registered after land on the greased dispatcher directly, so either way they
+all fire. But going first means every later provider that resolves `events` gets the
+greased instance, rather than one that resolved and *stored* `events` earlier holding
+onto the original. Grease already handles the two it can reach (the `Event` facade and
+Eloquent's static dispatcher); registering first covers any others.
+
 Everything keeps working exactly as before — just faster. Because the parity bar
 here is behavioural rather than byte-output, it's the one place worth a smoke test
 in your own suite if you lean heavily on event ordering; the package's own

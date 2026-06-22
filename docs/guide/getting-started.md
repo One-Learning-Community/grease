@@ -79,6 +79,10 @@ It's opt-in and **not** auto-discovered:
 Grease\Events\GreaseEventServiceProvider::class,
 ```
 
+Register it **first** in the array (or as early as practical), so listeners other
+providers add land directly on the greased dispatcher and nothing captures the
+original.
+
 See [The Event Dispatcher](/guide/events) for what it does and what it's worth.
 
 ## Verify nothing changed
