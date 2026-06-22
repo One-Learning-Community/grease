@@ -58,7 +58,7 @@ Output is byte-identical (asserted across every cast type and workload).
 | ----------------------------------- | ------: | -------: | :--: |
 | index: list 100 users → JSON        | 10.9 ms |   2.9 ms | −73% |
 | eager: 100 posts with author → JSON | 20.8 ms |   5.5 ms | −74% |
-| bulk: load 150, mutate, save        | 34.8 ms |  27.7 ms | −21% |
+| bulk: load 150, mutate, save        | 34.8 ms |  27.7 ms | −20% |
 | show one post (with author)         | 0.38 ms |  0.21 ms | −45% |
 
 > **Read these as Grease's share of the Eloquent-bound work, not your p99.** The macro

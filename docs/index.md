@@ -31,7 +31,7 @@ features:
     details: "hydrate −53% · toArray −53% · set+dirty −44% · read −31% · enum cast −58% · date serialization −92%. Marginal in isolation; compounded on a real request, they aren't."
   - icon: 📦
     title: Real requests, end to end
-    details: "Big end-to-end deltas on in-memory workloads (−21% to −74% across list, eager-load, mutate-save, show) — SQL included, not a micro-benchmark. Read them as Grease's share of the ORM work; the portable figure is the absolute time removed."
+    details: "Big end-to-end deltas on in-memory workloads (−20% to −74% across list, eager-load, mutate-save, show) — SQL included, not a micro-benchmark. Read them as Grease's share of the ORM work; the portable figure is the absolute time removed."
   - icon: 🔌
     title: Beyond Eloquent
     details: "A drop-in faster event dispatcher (−53% on no-listener dispatch) speeds up every dispatch app-wide — model events, views, cache, your own events."
