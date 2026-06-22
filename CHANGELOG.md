@@ -6,6 +6,19 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- **`Grease\Events\Dispatcher::hasListeners()` now memoizes its presence check** per
+  event name, against the same cache the `dispatch()` fast path already used (reset on
+  `listen()`/`forget()`, so behaviour is identical). Previously only `dispatch()`
+  consumed the cache; the public `hasListeners()` re-scanned every wildcard on each
+  call. This matters because the framework fires view events through a `hasListeners()`
+  guard (`ManagesEvents::callCreator`/`callComposer`), not a bare `dispatch()` — so the
+  Blade/Livewire render path never reached the cache before. Re-rendering the same
+  components now costs one wildcard scan per distinct view name instead of one per
+  render: **−92%** on a Livewire-shaped render with realistic wildcards registered
+  (557 μs → 47 μs, new `ViewEventBench`).
+
 ## [0.2.0] - 2026-06-22
 
 Two opt-in serialization helpers for code that builds its output array by hand

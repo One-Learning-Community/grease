@@ -193,6 +193,10 @@ directly on the greased dispatcher and nothing has captured the original. On an
 event-dense request (a page render's worth of dispatches) this roughly **halves**
 the event overhead — ~−56% when most events have no listener, ~−47% per-request when
 non-trivial wildcard listeners (model observers, package patterns) are registered.
+On a Blade/Livewire render the win is larger still — **−92%** — because the framework
+fires view events (`creating:`/`composing:`) through a `hasListeners()` guard, and
+that presence check is memoized, so re-rendering the same components stops re-scanning
+wildcards every time.
 
 ## Benchmarks
 

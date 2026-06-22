@@ -13,7 +13,7 @@ use Illuminate\Support\Arr;
  * to the stock dispatcher (same listeners, same order, same return values), which
  * the events-dispatcher parity suite asserts A/B against the real framework.
  *
- * Three optimizations, all on the hot `dispatch()` path:
+ * Four optimizations on the hot dispatch and presence-check paths:
  *   1. **No-listener fast path** — a string event with no listener, nothing to
  *      broadcast, and no active deferral can't do anything, so we skip parsing and
  *      the whole pipeline. The guard mirrors exactly when the stock pipeline no-ops.
@@ -24,6 +24,11 @@ use Illuminate\Support\Arr;
  *      {@see WildcardPattern} regex instead of `Str::is` recompiling it every call
  *      (the cost that makes a stock `hasListeners()` check expensive when wildcard
  *      listeners — model observers, Telescope — are registered).
+ *   4. **Memoized presence** — `hasListeners()` caches its yes/no per event name.
+ *      The framework fires view events through a `hasListeners()` guard
+ *      (`ManagesEvents::callCreator`/`callComposer`), so on a Blade/Livewire render
+ *      this — not `dispatch()` — is the hot call; memoizing turns a per-render
+ *      wildcard re-scan into one scan per distinct view name.
  */
 class Dispatcher extends BaseDispatcher
 {
@@ -42,8 +47,10 @@ class Dispatcher extends BaseDispatcher
     protected $wildcardPatterns = [];
 
     /**
-     * Memoized listener-presence per event name, so the no-listener fast path
-     * doesn't re-scan wildcards on every dispatch of the same event.
+     * Memoized listener-presence per event name. Consumed by both the no-listener
+     * fast path in `dispatch()` and the public `hasListeners()` itself — the latter
+     * is the framework's view-event guard, so this is what keeps a Blade/Livewire
+     * render from re-scanning wildcards on every component.
      *
      * @var array<string, bool>
      */
@@ -103,7 +110,7 @@ class Dispatcher extends BaseDispatcher
         // the stock pipeline — so skip it. Each guard clause matches a stock no-op
         // condition, so this never changes observable behaviour.
         if (is_string($event)
-            && ! ($this->hasListenersCache[$event] ??= $this->hasListeners($event))
+            && ! $this->hasListeners($event)
             && ! $this->shouldDeferEvent($event)
             && ! $this->shouldBroadcast(Arr::wrap($payload))) {
             return $halt ? null : [];
@@ -115,9 +122,13 @@ class Dispatcher extends BaseDispatcher
     /** {@inheritDoc} */
     public function hasListeners($eventName)
     {
-        // Identical to the stock check — the listener/wildcard caches are perf state,
-        // not a source of truth for presence (a cached empty list is still "none").
-        return isset($this->listeners[$eventName])
+        // Memoize presence. The framework fires view events through a hasListeners()
+        // guard (ManagesEvents::callCreator/callComposer), so this — not dispatch() —
+        // is the hot call on a Blade/Livewire render, and a stock check re-scans every
+        // wildcard on each (usually false) answer. The result only changes when
+        // listeners are added (listen() resets this cache) or removed (forget() resets
+        // it wholesale), so caching is behaviour-identical to the stock recomputation.
+        return $this->hasListenersCache[$eventName] ??= isset($this->listeners[$eventName])
             || isset($this->wildcards[$eventName])
             || $this->hasWildcardListeners($eventName);
     }

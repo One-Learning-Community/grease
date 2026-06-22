@@ -66,9 +66,15 @@ not per-model:
 | dispatch with listeners | **−18%** |
 | event-dense request, warm | **−56%** |
 | event-dense request, cold (with wildcards) | **−47%** |
+| view-event render, Blade/Livewire (`ViewEventBench`) | **−92%** |
 
-On an event-dense request it roughly **halves** the event overhead. See
-[The Event Dispatcher](/guide/events).
+On an event-dense request it roughly **halves** the event overhead. The view-event
+row is the one that matters for a Blade- or Livewire-heavy page: the framework fires
+`creating:`/`composing:` through a `hasListeners()` guard (`callCreator`/`callComposer`),
+not a bare `dispatch()`, and memoizing that presence check collapses a per-render
+wildcard re-scan into one scan per distinct view name — 557 μs → 47 μs on a
+Livewire-shaped render (same components re-rendered across roundtrips) with realistic
+wildcards registered. See [The Event Dispatcher](/guide/events).
 
 ## How to read these honestly
 

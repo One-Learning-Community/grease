@@ -8,7 +8,7 @@ own dispatcher, and a faithful port of
 
 ## What it does
 
-Three optimizations, all behaviour-identical to the stock dispatcher:
+Four optimizations, all behaviour-identical to the stock dispatcher:
 
 - **No-listener fast path.** Most dispatched events have no listener. Grease
   short-circuits them off a cached presence check instead of walking the resolution
@@ -18,11 +18,20 @@ Three optimizations, all behaviour-identical to the stock dispatcher:
 - **Pre-compiled wildcard patterns.** Wildcard listener patterns (`eloquent.*`,
   observer patterns, package patterns) are compiled once instead of re-scanned,
   uncached, on every call.
+- **Memoized presence.** `hasListeners()` caches its yes/no per event name — the one
+  the view layer leans on. The framework gates `creating:`/`composing:` behind
+  `hasListeners()` (`callCreator`/`callComposer`), so on a Blade/Livewire render *that*
+  is the hot call, not `dispatch()`; memoizing it makes re-rendering a component a
+  cached lookup instead of a fresh wildcard scan.
 
-That last one is the key insight. The naive "just ask `hasListeners()` before
-dispatching" idea is a *net loss* — `hasListeners()` re-scans every wildcard pattern
-uncached, so asking "is anyone listening?" can cost more than telling nobody. The
-win is in optimizing the dispatcher itself, not in gating it from outside.
+There's a subtlety worth spelling out. With a *stock* dispatcher, gating a dispatch
+behind `hasListeners()` is a *net loss* — it re-scans every wildcard pattern uncached,
+so asking "is anyone listening?" can cost more than just telling nobody. But the
+framework's own view layer gates exactly that way and you can't change it from a
+package — so Grease memoizes `hasListeners()` itself: the check the framework already
+pays for becomes one scan per distinct event name instead of one per call. That's why
+the Blade/Livewire render path — the same view names recurring across roundtrips —
+sees the biggest win of the whole tier.
 
 ## Behaviour-identical, by test
 
@@ -39,11 +48,14 @@ of A/B tests against the stock dispatcher.
 | dispatch with listeners | **−18%** |
 | event-dense request, warm | **−56%** |
 | event-dense request, cold (non-trivial wildcards) | **−47%** |
+| view-event render, Blade/Livewire | **−92%** |
 
 On an event-dense request — a page render's worth of dispatches — it roughly
-**halves** the event overhead. An Eloquent-only benchmark *understates* this tier on
-purpose: its real value is app-wide event traffic that a model benchmark never
-touches.
+**halves** the event overhead, and on a Blade/Livewire render (view events fired
+through the `hasListeners()` guard, the same components re-rendered across roundtrips)
+it cuts **−92%** — 557 μs → 47 μs in `ViewEventBench`. An Eloquent-only benchmark
+*understates* this tier on purpose: its real value is app-wide event traffic that a
+model benchmark never touches.
 
 ## Opt in
 
