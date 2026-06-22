@@ -49,6 +49,33 @@ class Dispatcher extends BaseDispatcher
      */
     protected $hasListenersCache = [];
 
+    /**
+     * Build a greased dispatcher that takes over from an existing one — copying its
+     * full state (listeners, wildcards, resolvers, deferral) so it's a transparent
+     * drop-in. Reads the base's protected state directly (legal: this is a subclass).
+     * Use it when swapping the bound `events` singleton after listeners may already
+     * have been registered.
+     */
+    public static function fromBase(BaseDispatcher $base): static
+    {
+        $new = new static($base->container);
+
+        $new->listeners = $base->listeners;
+        $new->wildcards = $base->wildcards;
+        $new->wildcardsCache = $base->wildcardsCache;
+        $new->queueResolver = $base->queueResolver;
+        $new->transactionManagerResolver = $base->transactionManagerResolver;
+        $new->deferredEvents = $base->deferredEvents;
+        $new->deferringEvents = $base->deferringEvents;
+        $new->eventsToDefer = $base->eventsToDefer;
+
+        foreach (array_keys($new->wildcards) as $pattern) {
+            $new->wildcardPatterns[$pattern] = new WildcardPattern($pattern);
+        }
+
+        return $new;
+    }
+
     /** {@inheritDoc} */
     public function listen($events, $listener = null)
     {

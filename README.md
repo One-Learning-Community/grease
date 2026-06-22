@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/onelearningcommunity/grease/actions/workflows/tests.yml/badge.svg)](https://github.com/onelearningcommunity/grease/actions/workflows/tests.yml)
 
-**Opt-in performance for Eloquent's hot path — the wins upstream won't merge.**
+**Opt-in performance for Laravel's hot paths — the wins upstream won't merge.**
 
 Grease is a single trait you add to a model. It makes attribute hydration, casting,
 and serialization measurably faster, with **byte-identical output** to vanilla
@@ -103,6 +103,27 @@ models that don't use it.
 | `HasGreasedHydration`   | per-row `ReflectionClass`, casts-array rebuild, redundant `newInstance` |
 | `HasGreasedAttributes`  | `getCasts` / `getDates` / mutator probes / `getDateFormat`              |
 | `HasGreasedCasts`       | per-access cast `switch` → resolved flyweights (see caveat)             |
+| `HasGreasedSerialization` | the Carbon parse-and-reformat round-trip for date serialization (timestamps + `datetime` casts), when a per-class probe proves the output is a byte-identical rewrite |
+
+## Beyond Eloquent: a faster event dispatcher
+
+Grease also ships a drop-in faster event dispatcher (a port of
+[laravel/framework#51184](https://github.com/laravel/framework/pull/51184)) — a
+no-listener fast path, a cached listener resolver, and pre-compiled wildcard
+patterns. It's **behaviour-identical** to the stock dispatcher (same listeners, same
+order, same return values) and speeds up *every* dispatch in the app, not just model
+events. Opt in by registering the provider (it is **not** auto-discovered):
+
+```php
+// bootstrap/providers.php (Laravel 11+) or the providers array in config/app.php
+Grease\Events\GreaseEventServiceProvider::class,
+```
+
+It swaps the bound `events` singleton for the greased dispatcher (carrying over any
+already-registered listeners) and points Eloquent's dispatcher at it too. On an
+event-dense request (a page render's worth of dispatches) this roughly **halves**
+the event overhead — ~−56% when most events have no listener, ~−47% per-request when
+non-trivial wildcard listeners (model observers, package patterns) are registered.
 
 ## Benchmarks
 
@@ -120,7 +141,8 @@ prove byte-identical**:
   write → eager-load) through a booted app, so any covered path's cost is tracked.
 
 Representative `CastBench` deltas (vanilla → greased): hydrate −61%, set+dirty
-−41%, read-all-casts −36%, `toArray` −20%.
+−41%, read-all-casts −36%, `toArray` −53%. The event dispatcher tier is measured
+separately by `DispatcherBench` and `EventStormBench`.
 
 ## Requirements
 

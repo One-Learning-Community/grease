@@ -59,10 +59,15 @@ both proof and regression guard.
   #51184): a drop-in `Illuminate\Events\Dispatcher` subclass — no-listener fast path,
   cached `getListeners()`, pre-compiled wildcard patterns. Behaviour-identical, just
   faster. Not a model trait — a *different axis*: bind it as the `events` singleton.
+  `::fromBase($existing)` migrates a live dispatcher's full state (listeners,
+  wildcards, resolvers, deferral) for a transparent swap.
+- `Events/GreaseEventServiceProvider.php` — opt-in binding (NOT auto-discovered):
+  swaps `events` via `fromBase`, clears the `Event` facade's cached root, and points
+  Eloquent's static dispatcher at the greased one.
 - `Support/WildcardPattern.php` — pre-compiled wildcard regex (reproduces `Str::is`),
   used by the dispatcher so wildcard matching isn't recompiled per call.
 
-### Tests (`tests/`) — 192 tests / 510 assertions, green on real Laravel
+### Tests (`tests/`) — 198 tests / 522 assertions, green on real Laravel
 - `CastParityTest` — every cast type × read + type-identity + `toArray` + all-null;
   encrypted deferral; enum/custom-class.
 - `CastEquivalenceParityTest` — the ported cast-objects ~40-case differential matrix
@@ -199,9 +204,13 @@ Roughly highest-leverage first.
      with non-trivial wildcards (the `WildcardPattern` win). Roughly halves a request's
      event overhead — the answer the Eloquent macro (~1%) structurally can't show.
      Verdict: **the tier is worth the opt-in.**
-   - **Still open:** the opt-in binding — swap `events` early, update Eloquent's static
-     dispatcher cache (`Model::setEventDispatcher`), and migrate already-registered
-     listeners from the dispatcher being replaced.
+   - ✅ **Opt-in binding done** (`GreaseEventServiceProvider` + `Dispatcher::fromBase`):
+     register the (non-auto-discovered) provider and it swaps `events`, carries over
+     already-registered listeners, clears the `Event` facade's cached root, and points
+     Eloquent's static dispatcher at the greased one. Covered by Testbench integration
+     tests (swap lands in container/facade/Eloquent; pre-swap listeners migrate).
+   - **Tier complete.** Remaining is optional polish: a `prefer-lowest` CI leg and a
+     note in the README caveats about the behavioural (not byte) parity bar.
 2. **Date-cast round-trip elimination.** ✅ **DONE for timestamps** — Tier 4
    (`HasGreasedSerialization`). The headline insight from building it: the *default*
    `serializeDate` (`toJSON`) does **not** produce the stored string — `2026-01-01

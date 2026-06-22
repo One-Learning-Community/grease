@@ -228,6 +228,60 @@ class EventsDispatcherParityTest extends TestCase
         }
     }
 
+    public function test_frombase_migrates_direct_and_wildcard_listeners(): void
+    {
+        $stock = new VanillaDispatcher(new Container);
+        $log = new ArrayObject;
+        $stock->listen('user.created', function () use ($log) {
+            $log[] = 'direct';
+        });
+        $stock->listen('user.*', function ($name) use ($log) {
+            $log[] = ['wild', $name];
+        });
+
+        $greased = GreasedDispatcher::fromBase($stock);
+
+        // The migrated dispatcher sees the listeners and fires them (the closures are
+        // the same instances, carried over).
+        $this->assertTrue($greased->hasListeners('user.created'));
+        $this->assertTrue($greased->hasWildcardListeners('user.created'));
+
+        $greased->dispatch('user.created');
+        $this->assertSame(['direct', ['wild', 'user.created']], $log->getArrayCopy());
+    }
+
+    public function test_frombase_then_listen_works(): void
+    {
+        $stock = new VanillaDispatcher(new Container);
+        $log = new ArrayObject;
+        $stock->listen('e', function () use ($log) {
+            $log[] = 'migrated';
+        });
+
+        $greased = GreasedDispatcher::fromBase($stock);
+        $greased->listen('e', function () use ($log) {
+            $log[] = 'added-after';
+        });
+
+        $greased->dispatch('e');
+        $this->assertSame(['migrated', 'added-after'], $log->getArrayCopy());
+    }
+
+    public function test_frombase_dispatch_matches_the_source_dispatcher(): void
+    {
+        // A migrated dispatcher returns exactly what the source would for the same event.
+        $stock = new VanillaDispatcher(new Container);
+        $stock->listen('calc', fn () => 'a');
+        $stock->listen('calc', fn () => 'b');
+        $stock->listen('calc.*', fn () => 'wild');
+
+        $greased = GreasedDispatcher::fromBase($stock);
+
+        $this->assertSame($stock->dispatch('calc'), $greased->dispatch('calc'));
+        $this->assertSame($stock->dispatch('calc.run'), $greased->dispatch('calc.run'));
+        $this->assertSame($stock->dispatch('unheard'), $greased->dispatch('unheard'));
+    }
+
     #[DataProvider('wildcardCases')]
     public function test_wildcard_pattern_matches_str_is(string $pattern, string $value): void
     {
