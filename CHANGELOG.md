@@ -6,6 +6,23 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **A greased Blade compiler (`Grease\View\Compiler`) — a new opt-in tier** that rewrites
+  one emit, `@props` resolution, the per-render hot path every component pays. Vanilla
+  compiles `@props` to a block that, on each render, rebuilds a flat name list
+  (`ComponentAttributeBag::extractPropNames`), partitions incoming attributes with
+  `in_array` (a linear scan per attribute), and snapshots the whole scope with
+  `get_defined_vars()` to unset attribute-named locals. The greased emit hoists the
+  name set to a per-site memoized keyed map (`Grease\View\Props::names`), tests
+  membership with `isset()` (O(1)), and replaces the scope snapshot with a targeted
+  `unset()` (provably equivalent — the partition is mutually exclusive, and `unset` of
+  an absent local is a no-op). Bind it by registering the (non-auto-discovered)
+  `Grease\View\GreaseViewServiceProvider`, which `extend`s `blade.compiler` via
+  `Compiler::fromBase()` (registered directives/components carry over). Behaviour-
+  identical: the prop/attribute partition is unchanged, asserted A/B against the stock
+  compiler. **−59%** on the prop-resolution block (316 μs → 129 μs, `PropResolutionBench`).
+
 ### Changed
 
 - **`Grease\Events\Dispatcher::hasListeners()` now memoizes its presence check** per
