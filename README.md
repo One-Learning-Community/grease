@@ -149,6 +149,28 @@ custom serializer simply falls back to the exact vanilla composition, so it is a
 safe to call. On a fresh-hydrated row, swapping `?->toJSON()` for it cut the hand-pick
 date path **−80%** (62.8μs → 12.3μs) in the bench.
 
+### Serializing a curated subset
+
+When you want a few columns of a wide model in array form, the line everyone writes is
+`Arr::only($model->attributesToArray(), $keys)` — which serializes *every* column
+(each cast, date, enum, decimal) and then throws most of them away.
+`greaseSerializeOnly()` narrows the model's visibility first, so only the keys you
+asked for are ever serialized:
+
+```php
+public function toSearchableArray(): array
+{
+    return $this->greaseSerializeOnly(['title', 'status', 'created_at']);
+}
+```
+
+The output is byte-identical to `Arr::only($model->attributesToArray(), $keys)` — the
+whole greased array path (date tier included) runs over the narrowed set, and the
+model's `visible`/`hidden` config is still honored. It is **non-mutating**: unlike
+`setVisible($keys)->attributesToArray()` it restores the model's visible list before
+returning (and skips a `clone`). Picking 3 of 23 cast-heavy columns, it ran **−87%**
+against the naive serialize-all-then-filter (175.8μs → 22.1μs).
+
 ## Beyond Eloquent: a faster event dispatcher
 
 Grease also ships a drop-in faster event dispatcher (a port of

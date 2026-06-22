@@ -17,6 +17,16 @@ All notable changes to `grease` are documented here. The format is based on
   the Carbon round-trip, everything else defers to the exact vanilla composition.
   Eligible for timestamps and plain `datetime` / `immutable_datetime` casts;
   −80% on the hand-pick date-serialization path (62.8μs → 12.3μs, fresh-hydrated).
+- **`greaseSerializeOnly(array $keys): array`** on `HasGreasedSerialization` —
+  serialize a curated subset of a model to its array form, byte-identical to
+  `Arr::only($model->attributesToArray(), $keys)` but without serializing the columns
+  the filter would discard. The greased array path (date tier included) runs over the
+  narrowed set; the model's own `visible`/`hidden` config is honored and its visible
+  list is restored before returning (non-mutating, no `clone`). Picking 3 of 23 cast-
+  heavy columns: −87% vs the naive serialize-all-then-filter (175.8μs → 22.1μs), and a
+  statistical tie with mutating `setVisible(...)->attributesToArray()` — the win is the
+  skipped work plus non-mutation, so no per-key-set precompute was added (it had no
+  measurable headroom to recover).
 
 ## [0.1.0] - 2026-06-22
 

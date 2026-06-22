@@ -182,6 +182,47 @@ trait HasGreasedSerialization
     }
 
     /**
+     * Serialize a curated subset of the model to its array form — the same output as
+     * `Arr::only($this->attributesToArray(), $keys)`, but without serializing the
+     * keys that filter would immediately throw away. The whole greased array path
+     * (date tier included) runs over the narrowed set, so a hand-picked subset that
+     * names `created_at` still gets the date-tier win, and a wide model picked down
+     * to a few columns skips the cast/mutator/append work for everything else.
+     *
+     * Non-mutating: the model's own `visible` list is restored before returning, so
+     * this is the speed of `setVisible(...)->attributesToArray()` without the
+     * permanent visibility change (and without a `clone`). The model's existing
+     * `visible`/`hidden` configuration is still honored — a requested key the model
+     * hides does not reappear — which is exactly why the result stays byte-identical
+     * to filtering the full `attributesToArray()` after the fact.
+     *
+     * @param  array<int, string>  $keys
+     * @return array<string, mixed>
+     */
+    public function greaseSerializeOnly(array $keys): array
+    {
+        $original = $this->getVisible();
+
+        // Intersect the request with any visibility the model already enforces, so
+        // the narrowed serialization can never expose a key the full attributesToArray()
+        // would have withheld. (An empty visible list means "no restriction", so the
+        // request stands alone.) No surviving keys → nothing to serialize.
+        $visible = $original === [] ? $keys : array_values(array_intersect($original, $keys));
+
+        if ($visible === []) {
+            return [];
+        }
+
+        $this->setVisible($visible);
+
+        try {
+            return $this->attributesToArray();
+        } finally {
+            $this->setVisible($original);
+        }
+    }
+
+    /**
      * The certified serialize strategy for this class under the live timezone and
      * connection: 'identity', 'utc_iso', or false (defer to vanilla). Keyed by
      * timezone + connection because the default-formatter rewrite is only valid at
