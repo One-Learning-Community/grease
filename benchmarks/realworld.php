@@ -162,6 +162,15 @@ $dispatchers = [
 ];
 $useDispatcher = fn (string $arm) => Model::setEventDispatcher($dispatchers[$arm]);
 
+// Freeze the clock for the parity probes. bulk_update writes updated_at, and the two
+// arms run a few ms apart — a clock-second boundary falling between them (or mid-way
+// through one arm's 150 saves) would make the *timestamps* differ, not Grease, and
+// trip a false PARITY FAIL. A fixed now makes the comparison deterministic without
+// weakening it: a genuine date-serialization divergence still shows, since both arms
+// serialize the same frozen instant. Reset before the timed rounds so they measure
+// against the real clock.
+\Illuminate\Support\Carbon::setTestNow('2026-01-01 12:00:00');
+
 foreach ($WORKLOADS as $name => $w) {
     $useDispatcher('plain');
     $plainOut = $probe(fn () => $w($MODELS['plain']));
@@ -173,6 +182,8 @@ foreach ($WORKLOADS as $name => $w) {
         exit(1);
     }
 }
+
+\Illuminate\Support\Carbon::setTestNow();
 echo "PARITY: PASS — grease output byte-identical to vanilla.\n".str_repeat('-', 70)."\n";
 
 // Linear-interpolated percentile (same method as numpy's default). p in [0,100].
