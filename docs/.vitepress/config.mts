@@ -22,7 +22,7 @@ export default defineConfig({
       {
         property: 'og:description',
         content:
-          "Opt-in performance for Laravel's hot paths. The wins upstream won't merge. Byte-identical output.",
+          "Opt-in performance for Laravel's hot paths. One trait, byte-identical output — built from optimizations declined upstream.",
       },
     ],
   ],

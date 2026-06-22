@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Grease
   text: Get greased.
-  tagline: Opt-in performance for Laravel's hot paths — the wins upstream won't merge. One trait, byte-identical output, real requests measurably faster end to end.
+  tagline: Opt-in performance for Laravel's hot paths. One trait, byte-identical output, real requests measurably faster — end to end. Built from optimizations declined upstream, packaged where you can opt in.
   image:
     src: /logo.svg
     alt: Grease
@@ -59,10 +59,10 @@ re-probing `method_exists` for mutators, re-resolving the date format, running a
 fresh `ReflectionClass` per `new Model`. None of it changes for the life of the
 class. **Grease computes each fact once per class and reuses it.**
 
-These optimizations were proposed to Laravel core repeatedly and declined on
-stability grounds — each one "marginal in isolation." Individually, maybe. Bundled,
-on a request that hydrates a hundred rows and serializes them to JSON, they move the
-number you actually pay for.
+Each of these was proposed to Laravel core and declined on reasonable grounds — every
+one "marginal in isolation." Individually, maybe. Bundled, on a request that hydrates
+a hundred rows and serializes them to JSON, they move the number you actually pay for.
+Grease is where that declined work lives — [see the history](/guide/why#where-these-came-from).
 
 <div style="text-align:center; margin: 3rem 0 1rem; font-size: 1.05rem;">
 
