@@ -45,12 +45,13 @@ class ViewPropsParityTest extends TestCase
     {
         $php = (new Compiler(new Filesystem, sys_get_temp_dir()))->compileString("@props(['type' => 'button'])");
 
-        $this->assertStringContainsString('Grease\\View\\Props::resolve(', $php);
-        $this->assertStringContainsString('isset($__propNames[$__key])', $php);
+        $this->assertStringContainsString('Grease\\View\\Props::mergeAttributes(', $php);
+        $this->assertStringContainsString('$$__key = $__value', $php);   // tight bind loop, not extract()
+        $this->assertStringNotContainsString('extract(', $php);
         $this->assertStringNotContainsString('get_defined_vars()', $php);
         $this->assertStringNotContainsString('extractPropNames', $php);
-        $this->assertStringNotContainsString('array_filter(', $php);   // defaults come from resolve(), not a re-filter
-        $this->assertSame(1, substr_count($php, '$__data ='), 'declaration must be evaluated exactly once');
+        $this->assertStringNotContainsString('array_filter(', $php);
+        $this->assertStringNotContainsString('in_array(', $php);
     }
 
     public function test_each_props_site_gets_a_distinct_memo_key(): void
@@ -62,7 +63,7 @@ class ViewPropsParityTest extends TestCase
 
         // Same declaration, two sites — the emitted memo keys must differ so distinct
         // components never alias one another's name map.
-        preg_match_all("/Props::resolve\\('([0-9a-f]+)'/", $first.$second, $m);
+        preg_match_all("/Props::mergeAttributes\\('([0-9a-f]+)'/", $first.$second, $m);
         $this->assertCount(2, array_unique($m[1]), 'two @props sites shared a memo key');
     }
 
@@ -76,7 +77,7 @@ class ViewPropsParityTest extends TestCase
         $this->assertInstanceOf(Compiler::class, $greased);
         $this->assertStringContainsString("echo 'hi'", $greased->compileString('@greeting'));
         // and the override is live on the cloned instance
-        $this->assertStringContainsString('Grease\\View\\Props::resolve(', $greased->compileString("@props(['x' => 1])"));
+        $this->assertStringContainsString('Grease\\View\\Props::mergeAttributes(', $greased->compileString("@props(['x' => 1])"));
     }
 
     /**

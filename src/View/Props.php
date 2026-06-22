@@ -3,6 +3,7 @@
 namespace Grease\View;
 
 use Illuminate\Support\Str;
+use Illuminate\View\ComponentAttributeBag;
 
 /**
  * The `@props` resolution Blade hand-inlines into every compiled component, lifted into
@@ -14,19 +15,17 @@ use Illuminate\Support\Str;
  * attribute-named locals.
  *
  * {@see \Grease\View\Compiler::compileProps()} evaluates the declaration once and calls
- * {@see resolve()}, which returns both halves it needs:
- *   - **names** — the keyed `[name => true]` set for O(1) `isset()` partitioning,
- *     memoized per `@props` site (a compile-time constant);
- *   - **defaults** — the string-keyed subset of the declaration, with *fresh* values
- *     (defaults can be runtime expressions) but using the cached key-structure, so the
- *     `is_string` key walk is paid once per site, not once per render.
+ * {@see mergeAttributes()}, which does the whole job — partition, defaults, surviving bag
+ * — and returns one map the compiler binds with a tight `$$key = $value` loop: the
+ * resolved prop locals plus `attributes` (the non-prop bag) as just another key. The loop
+ * (not `extract`, which is slower and skips non-identifier keys) reproduces vanilla's
+ * locals exactly, including the inaccessible `${'icon-name'}` kebab-alias local.
  *
- * The membership set is byte-identical to `extractPropNames` (every name plus its kebab
- * alias), only shaped as a set; the defaults are exactly what `array_filter(decl,
- * 'is_string', ARRAY_FILTER_USE_KEY)` produces. The compiler still binds the locals
- * inline (a helper can't write its caller's scope, and `extract()` skips non-identifier
- * keys like `icon-name`). The parity suite asserts the compiled block resolves the same
- * props and leaves the same attributes as vanilla.
+ * Internally the name set is the same membership `extractPropNames` builds (every name
+ * plus kebab alias), shaped as a set for `isset()`; the static shape (names + which keys
+ * carry defaults) is memoized per `@props` site, so only the fresh default *values* are
+ * read each render. The parity suite asserts the compiled block resolves the same props
+ * and leaves the same attributes as vanilla.
  */
 class Props
 {
@@ -40,20 +39,47 @@ class Props
     protected static array $meta = [];
 
     /**
-     * Resolve a declaration into its partition name set and its default map.
+     * The whole `@props` resolution in one call: partition the incoming attributes into
+     * props (consumed) and the rest, apply defaults to the string-keyed props, and hand
+     * back a single map ready to `extract()` into the component scope — the resolved prop
+     * locals plus `attributes` (the surviving, non-prop bag). Replaces the entire inlined
+     * block the compiler used to emit.
+     *
+     * Equivalent to vanilla's partition + defaults, with one wrinkle the caller accepts by
+     * using `extract()`: a prop reached via a *non-identifier* key (the kebab alias, e.g.
+     * `icon-name`) lands in the map but `extract()` skips it — exactly as vanilla's value
+     * landed in an inaccessible `${'icon-name'}` local. The rendered output is identical;
+     * only the (unusable) junk local differs.
      *
      * @param  string  $site  stable id for this `@props` location (compile-time constant)
      * @param  array<array-key, mixed>  $declaration  the `@props` array (one evaluation)
-     * @return array{0: array<string, true>, 1: array<array-key, mixed>}
+     * @return array<string, mixed>  prop locals + `attributes`, ready for `extract()`
      */
-    public static function resolve(string $site, array $declaration): array
+    public static function mergeAttributes(string $site, array $declaration, ComponentAttributeBag $attributes): array
     {
         $meta = static::$meta[$site] ??= static::analyze($declaration);
+        $names = $meta['names'];
 
-        // Defaults carry the declaration's *current* values (which may be runtime
-        // expressions), filtered to the string keys via the cached structure — no
-        // per-render is_string walk, and no second evaluation of the declaration.
-        return [$meta['names'], array_intersect_key($declaration, $meta['stringKeys'])];
+        $props = [];
+        $rest = [];
+
+        foreach ($attributes->getAttributes() as $key => $value) {
+            if (isset($names[$key])) {
+                $props[$key] = $value;
+            } else {
+                $rest[$key] = $value;
+            }
+        }
+
+        // Defaults (`?? `): a string-keyed prop not passed (or passed null) takes its
+        // declaration value. Cached key-structure, fresh values — no per-render is_string.
+        foreach ($meta['stringKeys'] as $key => $unused) {
+            $props[$key] ??= $declaration[$key];
+        }
+
+        $props['attributes'] = new ComponentAttributeBag($rest);
+
+        return $props;
     }
 
     /**

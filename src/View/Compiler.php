@@ -56,39 +56,20 @@ class Compiler extends BladeCompiler
     /**
      * {@inheritDoc}
      *
-     * Behaviour-identical to the parent emit, but the name set is hoisted to a memoized
-     * keyed map, membership is `isset()`, and the `get_defined_vars()` cleanup is a
-     * targeted `unset()`. See the class docblock for why each is equivalent.
+     * The whole inlined block — partition, defaults, scope cleanup — collapses into one
+     * {@see Props::mergeAttributes()} call returning a single map (resolved prop locals
+     * plus `attributes`, the surviving bag) that a tight `$$__key = $__value` loop binds
+     * into scope. The loop (not `extract`, which is slower and skips non-identifier keys)
+     * reproduces vanilla's locals exactly, including the inaccessible kebab-alias local.
      */
     protected function compileProps($expression)
     {
         $site = md5(($this->getPath() ?: 'inline').':'.$this->greasePropsSite++);
 
-        return "<?php \$attributes ??= new \\Illuminate\\View\\ComponentAttributeBag;
-
-\$__data = {$expression};
-[\$__propNames, \$__propDefaults] = \\Grease\\View\\Props::resolve('{$site}', \$__data);
-
-\$__newAttributes = [];
-
-foreach (\$attributes->all() as \$__key => \$__value) {
-    if (isset(\$__propNames[\$__key])) {
-        \$\$__key = \$\$__key ?? \$__value;
-    } else {
-        \$__newAttributes[\$__key] = \$__value;
-    }
+        return "<?php foreach (\\Grease\\View\\Props::mergeAttributes('{$site}', {$expression}, \$attributes ?? new \\Illuminate\\View\\ComponentAttributeBag) as \$__key => \$__value) {
+    \$\$__key = \$__value;
 }
 
-\$attributes = new \\Illuminate\\View\\ComponentAttributeBag(\$__newAttributes);
-
-foreach (\$__propDefaults as \$__key => \$__value) {
-    \$\$__key = \$\$__key ?? \$__value;
-}
-
-foreach (\$attributes->all() as \$__key => \$__value) {
-    unset(\$\$__key);
-}
-
-unset(\$__data, \$__propNames, \$__propDefaults, \$__newAttributes, \$__key, \$__value); ?>";
+unset(\$__key, \$__value); ?>";
     }
 }

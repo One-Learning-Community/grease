@@ -10,26 +10,27 @@ All notable changes to `grease` are documented here. The format is based on
 
 - **A greased Blade compiler (`Grease\View\Compiler`) — a new opt-in tier** that rewrites
   one emit, `@props` resolution, the per-render hot path every component pays. Vanilla
-  compiles `@props` to a block that, on each render, rebuilds a flat name list
+  compiles `@props` to a ~20-line block that, on each render, rebuilds a flat name list
   (`ComponentAttributeBag::extractPropNames`), partitions incoming attributes with
-  `in_array` (a linear scan per attribute), and snapshots the whole scope with
-  `get_defined_vars()` to unset attribute-named locals — and it evaluates the whole
-  `@props` array literal *twice* (once for the names, once for the `array_filter` that
-  finds the defaults). The greased emit evaluates the declaration once and routes it
-  through a single `Grease\View\Props::resolve()`, which returns both halves: a per-site
-  memoized keyed name set (membership via `isset()`, O(1)) and the string-keyed defaults
-  (fresh values, cached key-structure — no per-render `is_string` walk). The scope
-  snapshot becomes a targeted `unset()` (provably equivalent — the partition is mutually
-  exclusive, and `unset` of an absent local is a no-op). Bind it by registering the
-  (non-auto-discovered) `Grease\View\GreaseViewServiceProvider`, which `extend`s
-  `blade.compiler` via `Compiler::fromBase()` (registered directives/components carry
-  over). Behaviour-identical: the prop/attribute partition is unchanged, asserted A/B
-  against the stock compiler across declaration/attribute scenarios. **−59%** on the
-  prop-resolution block (316 μs → 129 μs, `PropResolutionBench`) — which is **~−4 to −6%**
-  on a *full* 1,000-anonymous-component render (`benchmarks/blade.php`, Taylor's 2024
-  challenge), more on prop-heavy components, since `@props` is only a slice of a
-  component's total render cost. Real, free, and parity-safe; it compounds with the
-  other tiers rather than halving a render on its own.
+  `in_array` (a linear scan per attribute), evaluates the `@props` array literal *twice*
+  (once for the names, once for the `array_filter` that finds the defaults), allocates a
+  second attribute bag, and snapshots the whole scope with `get_defined_vars()` to unset
+  attribute-named locals. The greased emit collapses all of that into one call —
+  `Grease\View\Props::mergeAttributes($site, $decl, $attributes)` — that partitions,
+  applies defaults, and returns a single map (the resolved prop locals plus `attributes`,
+  the surviving bag) which a tight `$$key = $value` loop binds into scope. The name set
+  and which keys carry defaults are memoized per `@props` site (compile-time constants),
+  so only fresh default *values* are read each render; the declaration is evaluated once;
+  and the loop (not `extract`, which is slower and skips non-identifier keys) reproduces
+  vanilla's locals exactly — including the inaccessible `${'icon-name'}` kebab-alias
+  local. Bind it by registering the (non-auto-discovered)
+  `Grease\View\GreaseViewServiceProvider`, which `extend`s `blade.compiler` via
+  `Compiler::fromBase()` (registered directives/components carry over). Behaviour-
+  identical, asserted A/B against the stock compiler across declaration/attribute
+  scenarios (execution parity, incl. `get_defined_vars`). **~−14%** on a full
+  1,000-anonymous-component render (`benchmarks/blade.php`, Taylor's 2024 challenge),
+  holding across simple and prop-heavy components — a real, free, parity-safe slice of
+  every component render that compounds with the other tiers.
 
   *Narrowing:* the declaration is evaluated once, not twice — so a non-deterministic
   default (e.g. `@props(['id' => uniqid()])`) yields one value rather than vanilla's
