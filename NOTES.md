@@ -107,6 +107,10 @@ both proof and regression guard.
   to time a non-identical state. The harness counterpart to `DateSerializationParityTest`.
 - `Bench/DispatcherBench.php` — events tier A/B (greased vs stock dispatcher), both
   seeded with wildcard listeners (the real-app shape): no-listener −53%, with-listeners −18%.
+- `Bench/EventStormBench.php` — the events tier where it *matters*: a page-render-shaped
+  storm of ~165 dispatches. Lean (warm, mostly no-listener) −56%; cold (fresh
+  per-request dispatcher + non-trivial wildcards) −47%. The request-level answer the
+  Eloquent macro can't show.
 - `Bench/SuiteBench.php` + `Bench/Support/DrivesTestSuite.php` — phpbench-via-phpunit
   bridge: drives each no-arg `test*` of `SqlRoundtripTest` as a subject through a
   booted Testbench app (skips `tearDown` — it fatals under the phpbench runtime).
@@ -190,9 +194,14 @@ Roughly highest-leverage first.
      on purpose** — its real value is *app-wide* event traffic (view rendering, cache,
      custom events), which an Eloquent benchmark doesn't touch. The truer number is
      `DispatcherBench` (−53% per no-listener dispatch).
-   - **Still open:** the opt-in binding (swap `events` early + Eloquent's static
-     dispatcher cache + migrate already-registered listeners), and — to show the real
-     win — an event-heavy bench (e.g. view-render-shaped dispatch traffic).
+   - ✅ **Event-heavy bench done** (`EventStormBench`): a page-render-shaped storm
+     (~165 dispatches) is **−56%** lean/warm (the fast path) and **−47%** cold/per-request
+     with non-trivial wildcards (the `WildcardPattern` win). Roughly halves a request's
+     event overhead — the answer the Eloquent macro (~1%) structurally can't show.
+     Verdict: **the tier is worth the opt-in.**
+   - **Still open:** the opt-in binding — swap `events` early, update Eloquent's static
+     dispatcher cache (`Model::setEventDispatcher`), and migrate already-registered
+     listeners from the dispatcher being replaced.
 2. **Date-cast round-trip elimination.** ✅ **DONE for timestamps** — Tier 4
    (`HasGreasedSerialization`). The headline insight from building it: the *default*
    `serializeDate` (`toJSON`) does **not** produce the stored string — `2026-01-01
