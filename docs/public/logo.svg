@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Grease">
+  <defs>
+    <linearGradient id="g" x1="20" y1="6" x2="44" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f0b755"/>
+      <stop offset="1" stop-color="#c9791a"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 4c0 0 20 22 20 36a20 20 0 1 1-40 0C12 26 32 4 32 4Z" fill="url(#g)"/>
+  <ellipse cx="25" cy="40" rx="5" ry="8" fill="#fff" opacity="0.35"/>
+</svg>

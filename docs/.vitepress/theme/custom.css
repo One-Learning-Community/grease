@@ -1,0 +1,56 @@
+/**
+ * Grease brand theme — warm amber "grease" accent on VitePress defaults.
+ * Tuned for the "industrial, measured, fast" vibe.
+ */
+
+:root {
+  --vp-c-brand-1: #c9791a;
+  --vp-c-brand-2: #e8a33d;
+  --vp-c-brand-3: #f0b755;
+  --vp-c-brand-soft: rgba(232, 163, 61, 0.14);
+
+  --vp-c-brand-1-dark: #f0b755;
+}
+
+.dark {
+  --vp-c-brand-1: #f0b755;
+  --vp-c-brand-2: #e8a33d;
+  --vp-c-brand-3: #c9791a;
+  --vp-c-brand-soft: rgba(232, 163, 61, 0.16);
+}
+
+/* Hero: a molten-amber gradient on the brand name + a warm glow behind it. */
+:root {
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #f0b755 30%, #e8762a);
+
+  --vp-home-hero-image-background-image: linear-gradient(
+    -45deg,
+    rgba(232, 163, 61, 0.55),
+    rgba(201, 121, 26, 0.45)
+  );
+  --vp-home-hero-image-filter: blur(48px);
+}
+
+/* Make the tagline read like a headline, not a footnote. */
+.VPHero .tagline {
+  font-weight: 500;
+  max-width: 38rem;
+}
+
+/* Feature cards: a hair of warmth on hover so the grid feels alive. */
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-2);
+}
+
+/* Inline code reads better with a touch of brand on key surfaces. */
+.vp-doc a {
+  text-decoration-color: var(--vp-c-brand-soft);
+}
+
+/* Tighten the big stat numbers when used in custom blocks. */
+.grease-stat {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--vp-c-brand-1);
+}
