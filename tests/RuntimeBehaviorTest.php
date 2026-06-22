@@ -87,6 +87,24 @@ class RuntimeBehaviorTest extends TestCase
         $this->assertSame(true, $g->extra);
     }
 
+    public function test_recasting_an_already_warmed_key_is_not_stale(): void
+    {
+        // getCastType() is memoized per key, so re-casting a key whose type was
+        // already cached must still reflect the new type once the instance diverges.
+        $row = $this->sampleRow();
+
+        $g = (new GreasedSample)->newFromBuilder($row);
+        $this->assertSame(42, $g->int_val);          // warms castTypes['int_val'] = 'int'
+        $g->withCasts(['int_val' => 'string']);       // override an already-cached cast type
+
+        $v = (new VanillaSample)->newFromBuilder($row);
+        $v->withCasts(['int_val' => 'string']);
+
+        $this->assertSame('42', $g->int_val, 'stale cached cast type after runtime re-cast');
+        $this->assertSame($v->int_val, $g->int_val);
+        $this->assertSame(get_debug_type($v->int_val), get_debug_type($g->int_val));
+    }
+
     public function test_a_non_diverged_instance_keeps_the_fast_path(): void
     {
         // Diverging one instance must not corrupt the per-class cache for others.

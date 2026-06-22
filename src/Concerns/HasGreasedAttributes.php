@@ -6,10 +6,11 @@ namespace Grease\Concerns;
  * Tier 2 — attribute metadata memoization.
  *
  * The class-pure helpers Eloquent recomputes on every read/write: `getCasts()`
- * (a fresh array_merge per call), `getDates()` (a fresh array per call), the
- * uncached `Str::studly` + method_exists in `hasGetMutator`/`hasSetMutator`, and
+ * (a fresh array_merge per call), `getCastType()` (a string->type re-walk on
+ * every cast access), `getDates()` (a fresh array per call), the uncached
+ * `Str::studly` + method_exists in `hasGetMutator`/`hasSetMutator`, and
  * `getDateFormat()` (which resolves a connection + grammar per date cast). All
- * memoized here; the cast cache is kept honest under runtime `mergeCasts()`.
+ * memoized here; the cast caches are kept honest under runtime `mergeCasts()`.
  */
 trait HasGreasedAttributes
 {
@@ -34,6 +35,22 @@ trait HasGreasedAttributes
         }
 
         return static::$greaseBlueprint[static::class]['casts'] ??= parent::getCasts();
+    }
+
+    protected function getCastType($key)
+    {
+        // The resolved cast type is a pure function of getCasts()[$key] (already
+        // memoized above) — so cache it per key, exactly like getCasts() itself,
+        // instead of re-walking the string->type conversion on every cast access.
+        // Diverged instances defer to live resolution. A subclass that genuinely
+        // overrides getCastType() shadows this trait method entirely (a class
+        // method wins over a trait method), so real overrides stay live and fully
+        // honored — they simply opt out of the cache.
+        if ($this->greaseCastsDiverged) {
+            return parent::getCastType($key);
+        }
+
+        return static::$greaseBlueprint[static::class]['castTypes'][$key] ??= parent::getCastType($key);
     }
 
     public function getDates()
