@@ -80,8 +80,8 @@ export default defineConfig({
     },
 
     footer: {
-      message: 'Released under the MIT License.',
-      copyright: 'Byte-identical to vanilla, or it\'s a failing test.',
+      message: 'Byte-identical to vanilla, or it\'s a failing test. · MIT Licensed',
+      copyright: 'Copyright © 2026 One Learning Community LTD',
     },
   },
 })

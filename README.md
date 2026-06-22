@@ -167,7 +167,7 @@ PHP 8.2+, Laravel 12/13.
 
 ## License
 
-MIT.
+Released under the [MIT License](LICENSE) — Copyright © 2026 One Learning Community LTD.
 
 ## Built with Claude
 
