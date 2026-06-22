@@ -52,3 +52,37 @@ jobs:
 
       - name: Parity smoke against real queries (the package's core promise)
         run: php benchmarks/realworld.php 1
+
+  # Resolve the *lowest* versions our constraints allow, to prove the declared
+  # floor (illuminate ^12.0) is honest — Grease overrides framework internals, so a
+  # method that only landed in a later 12.x patch would slip through "highest" CI.
+  lowest:
+    name: Lowest deps · PHP 8.2 · Laravel 12
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: dom, curl, libxml, mbstring, pdo, sqlite, pdo_sqlite
+          coverage: none
+
+      - name: Pin Laravel & Testbench to the 12 floor
+        run: >
+          composer require
+          "laravel/framework:12.*"
+          "orchestra/testbench:10.*"
+          --no-interaction --no-update
+
+      - name: Install the lowest allowed dependencies
+        run: composer update --prefer-dist --prefer-lowest --prefer-stable --no-interaction --no-progress
+
+      - name: Run test suite
+        run: vendor/bin/phpunit
+
+      - name: Parity smoke against real queries (the package's core promise)
+        run: php benchmarks/realworld.php 1
