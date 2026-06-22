@@ -2,6 +2,7 @@
 
 namespace Grease\View;
 
+use Grease\View\ComponentAttributeBag as GreaseComponentAttributeBag;
 use Illuminate\Support\Str;
 use Illuminate\View\ComponentAttributeBag;
 
@@ -43,7 +44,9 @@ class Props
      * props (consumed) and the rest, apply defaults to the string-keyed props, and hand
      * back a single map ready to `extract()` into the component scope — the resolved prop
      * locals plus `attributes` (the surviving, non-prop bag). Replaces the entire inlined
-     * block the compiler used to emit.
+     * block the compiler used to emit. The surviving bag is a {@see GreaseComponentAttributeBag},
+     * so the `$attributes->merge([...])` nearly every component template runs takes the
+     * Collection-free fast path — byte-identical to vanilla's.
      *
      * Equivalent to vanilla's partition + defaults, with one wrinkle the caller accepts by
      * using `extract()`: a prop reached via a *non-identifier* key (the kebab alias, e.g.
@@ -77,7 +80,7 @@ class Props
             $props[$key] ??= $declaration[$key];
         }
 
-        $props['attributes'] = new ComponentAttributeBag($rest);
+        $props['attributes'] = new GreaseComponentAttributeBag($rest);
 
         return $props;
     }
