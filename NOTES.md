@@ -159,28 +159,38 @@ both proof and regression guard.
 - `composer.json` scripts: `test`, `bench`, `bench:suite`.
 
 ### Measured results
-- Blade render tier (`blade.php`, 1,000 anonymous components, parity ✔, Xdebug-inflated
-  but A/B): with `@props` only, simple −14.2% / rich −14.5%; **adding the greased
-  `merge()`: simple −26.6%, rich −24.5%.** ~half the per-render cost is still vanilla
-  (require/extract machinery + component resolution) — see Open/to-explore #10.
-- Real endpoints (end-to-end incl. SQL, vanilla → greased), **with Tier 4 (timestamps
-  + datetime casts)**: posts_with_author −74.9%, index_users −73.3%, show_post −46.8%,
-  bulk_update −19.1%. (Pre-Tier-4: −16.4% / −16.9% / −10.0% / −14.4%. The two read
-  endpoints carry a User `email_verified_at` and Post `published_at` datetime cast on
-  top of the timestamps — each another per-row Carbon round-trip the cast path now
-  eliminates.)
-- Tier 4 isolated (`DateSerializationBench`, `attributesToArray`, UTC, rstdev <2%):
-  timestamps-only **59.9 µs → 5.1 µs = −92%** (~55 µs/model, two timestamps);
-  datetime-casts-only **81.8 µs → 6.6 µs = −92%** (~75 µs/model, two casts). Each
-  Carbon parse-and-reformat ≈ 27 µs.
-- Per-op (CastBench, rstdev ~1%): hydrate −61%, set+dirty −41%, read −36%,
-  toArray **−53%** (350.9 µs → 164.1 µs; was −20% pre-Tier-4 — the mixed fixture's
-  timestamps and its `datetime`/`immutable_datetime` casts are all fast-pathed now;
-  its `date` and custom-format date columns still defer — see below).
-- Caveat for honesty: the macro `%`s use `:memory:` SQLite (fastest possible DB),
-  so the ORM is a larger share than against a networked DB — Tier 4's high `%`s are
-  most inflated by this. But the absolute µs saved per request (~27 µs × date columns
-  × rows) is DB-independent.
+**Measurement environment (read first).** All numbers below are now measured on **Linux
+via `benchmarks/docker`** (php:8.4-cli + opcache + JIT, no Xdebug). macOS was distorting
+them and is no longer trusted: its `/var→/private/var` symlink confuses opcache's realpath
+keying and CLI opcache behaves unlike production. Concretely, Mac **inflated** the per-op
+microbench wins (a fatter vanilla baseline) and **understated** Blade (the `is_file` it
+ranked at ~8% of a render is ~3% on Linux — the whole isFile detour was a Mac artifact).
+The Docker box is Linux/arm64, so absolute µs and CPU-bound `%`s still vary by host — the
+harness is the source of truth, reproduce on your target. Earlier macOS figures are kept in
+git history for contrast.
+
+- **Blade render tier** (`blade.php`, 1,000 anonymous components, parity ✔): @props+merge,
+  **simple −38%, rich −29.5%** (vanilla 16.1/23.1 ms → 9.9/16.2 ms). (Mac read this as
+  −24–27%.) The remaining cost is the compiled-view body (~60–70%, mostly real template
+  work) — see Open/to-explore #10.
+- **Real endpoints** (`realworld.php`, end-to-end incl. SQL, 3-run medians): index_users
+  **−78%** (3.12 ms → 0.69 ms), posts_with_author **−77%** (6.0 → 1.4 ms), show_post **−47%**
+  (113 → 60 µs), bulk_update **−18%** (7.25 → 5.9 ms). Endpoint `%`s held up well vs Mac
+  (the ORM share dominates on `:memory:` SQLite either way).
+- **Date serialization** (`DateSerializationBench`, UTC, rstdev ~1%): timestamps-only
+  **21.5 µs → 2.9 µs = −87%**; datetime-casts-only **31.5 µs → 3.4 µs = −89%**. (Mac read
+  −92% off a slower Carbon baseline.)
+- **Per-op** (`CastBench`, rstdev ~1.5%, two runs): hydrate **−34%** (7.4 → 4.9 µs), read
+  **−27%** (51 → 38 µs), set+dirty **−39%** (31 → 18.5 µs), toArray **−47%** (107 → 56 µs),
+  enum read **−48%** (2.8 → 1.46 µs). All notably lower than the Mac figures (hydrate was
+  claimed −61%) — the Mac baseline was inflated. Endpoint `%`s are higher than per-op
+  because the greased event dispatcher + compounding ride on top.
+- **Event dispatcher** (`DispatcherBench` / `EventStormBench`): no-listener **−53%**
+  (0.40 → 0.19 µs), with-listeners **−18%** (0.73 → 0.60 µs); storm lean **−57%**, cold
+  **−54%**. These matched Mac closely (dispatch isn't filesystem- or Carbon-bound).
+- Caveat for honesty: the endpoint `%`s use `:memory:` SQLite (fastest possible DB), so the
+  ORM is a larger share than against a networked DB. The portable figure is absolute time
+  removed per request, which is DB-independent.
 
 ---
 
@@ -341,22 +351,25 @@ Roughly highest-leverage first.
       (pure-binding micro, JIT on): `extract` is a C builtin and ~2× faster than any userland
       loop for ~12 vars (`get_defined_vars` snapshot loop +86%, skip-list loop +114%). The
       realized full-render change was a +1.3% regression. `extract` is already optimal.
-    - **❌ isFile memoization: PARKED (modest + filesystem-risky).** Excimer flagged the
-      per-render `is_file()` existence stat at ~8%; memoizing positives on the view engine's
-      Filesystem (scoped, flushed on `terminating`) measured a clean **~6.5%** (isolation:
-      17.1 vs 18.5 ms). Dropped anyway: (a) caching `is_file` imposes a freshness assumption
-      PHP/Laravel deliberately leave to the OS/FS — NFS-without-caching deployments rely on
-      the re-stat; (b) that `is_file` is load-bearing for `CompilerEngine`'s recompile-on-
-      missing recovery. Not a clean-enough win for a zero-surprises package.
+    - **❌ isFile memoization: DROPPED — it was chasing a Mac artifact.** Excimer-on-Mac
+      ranked the per-render `is_file()` stat at ~8% (memoizing it measured a "clean ~6.5%").
+      On **Linux it's ~3%** (`benchmarks/docker`): macOS's stat cache thrashes (same path,
+      same process: 16 ns warm vs ~1.5 µs in-render), which the Linux VFS doesn't. So the
+      lever was mostly a Mac measurement artifact. It was *also* the wrong thing on principle
+      — caching `is_file` imposes a freshness assumption PHP/Laravel leave to the OS/FS
+      (NFS-without-caching relies on the re-stat), and that `is_file` is load-bearing for
+      `CompilerEngine`'s recompile-on-missing recovery. Doubly correct to drop.
     - **⚠️ Benching trap found the hard way:** a provider `boot()` that EAGER-resolves the
       Blade engine captures the compiled-view path *before* a bench sets `view.compiled`,
       breaking per-arm cache isolation and producing a bogus **−87%**. (Harmless in prod —
       config is set before providers boot — but it poisons the macro. Keep view-tier wiring
       in `register`/lazy, or set `view.compiled` before booting the provider in benches.)
-    - **Honest standing numbers (Excimer/clean, JIT on):** vanilla ~24 ms, greased compiler
-      (@props+merge) ~18.5 ms = **−24%** (confirms the shipped figure). Render self splits ≈
-      compiled-view body ~70% (mostly real work + the `Str::of` chain), then `e()`, `merge`,
-      `Component::resolve`, the Factory machinery.
+    - **Honest standing numbers (Linux, `benchmarks/docker`, JIT on):** @props+merge is
+      **simple −38% / rich −29.5%** (vanilla 16.1/23.1 ms → 9.9/16.2 ms). (Mac read this as
+      −24% — it understated the win.) Render self splits ≈ compiled-view body ~60–70%
+      (mostly real work + the `Str::of` chain), then `e()`, `merge`, `Component::resolve`,
+      the Factory machinery; `is_file` ~3%. **The −33% goal is already met/exceeded by the
+      shipped tier on Linux** — no filesystem hack needed.
     - **Still open — component resolution (~15%, the real remaining lever).**
       `AnonymousComponent::resolve` + the Factory run a per-render factory/resolver lookup.
       Lever: cache resolution per component name. Behaviour-identical bar; risk is shared-

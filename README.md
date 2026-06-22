@@ -52,23 +52,31 @@ framework. Grease is where this work lives now.
 
 In-memory SQLite, real queries, controller-shaped workloads — **end-to-end per
 request, including SQL.** Vanilla Eloquent vs. the same models with `HasGrease`.
-Output is byte-identical (asserted across every cast type and workload).
+Output is byte-identical (asserted across every cast type and workload). Measured on
+Linux via [`benchmarks/docker`](benchmarks/docker) (PHP 8.4, opcache + JIT) — see the
+note below on why not macOS.
 
 | Endpoint (one request, incl. SQL)   | vanilla | + Grease |  Δ   |
 | ----------------------------------- | ------: | -------: | :--: |
-| index: list 100 users → JSON        | 10.9 ms |   2.9 ms | −73% |
-| eager: 100 posts with author → JSON | 20.8 ms |   5.5 ms | −74% |
-| bulk: load 150, mutate, save        | 34.8 ms |  27.7 ms | −20% |
-| show one post (with author)         | 0.38 ms |  0.21 ms | −45% |
+| index: list 100 users → JSON        | 3.12 ms |  0.69 ms | −78% |
+| eager: 100 posts with author → JSON | 6.01 ms |  1.39 ms | −77% |
+| bulk: load 150, mutate, save        | 7.25 ms |  5.90 ms | −18% |
+| show one post (with author)         | 0.11 ms |  0.06 ms | −47% |
 
 > **Read these as Grease's share of the Eloquent-bound work, not your p99.** The macro
 > runs on `:memory:` SQLite, where database I/O is ~zero — so the ORM (and Grease's
 > slice of it) is a large fraction of the request. The portable figure is the
-> **absolute time removed** (~8 ms off `index`, ~15 ms off `eager`); against a networked
-> database the same milliseconds are a smaller percentage of a slower request. The gain
-> scales with how much a request hydrates and serializes.
+> **absolute time removed** (~2.4 ms off `index`, ~4.6 ms off `eager`); against a
+> networked database the same milliseconds are a smaller percentage of a slower request.
+> The gain scales with how much a request hydrates and serializes.
 
-Reproduce: `php benchmarks/realworld.php` (see [`benchmarks/`](benchmarks)).
+> **Why Linux/Docker, not macOS.** macOS distorts these: the `/var`→`/private/var`
+> symlink confuses opcache's realpath keying and CLI opcache behaves unlike production,
+> which inflates filesystem-bound work and the microbench baselines. The numbers here are
+> from [`benchmarks/docker`](benchmarks/docker) (Linux). Your hardware will differ —
+> reproduce on your target; the harness makes that one command.
+
+Reproduce: `docker build -t grease-bench benchmarks/docker && docker run --rm -v "$PWD":/app -w /app grease-bench php benchmarks/realworld.php`.
 
 ## Caveats
 
@@ -147,7 +155,7 @@ per-field Carbon parse. It accelerates timestamps and plain
 `datetime` / `immutable_datetime` casts; a `date` cast, custom-format datetime, or
 custom serializer simply falls back to the exact vanilla composition, so it is always
 safe to call. On a fresh-hydrated row, swapping `?->toJSON()` for it cut the hand-pick
-date path **−80%** (62.8μs → 12.3μs) in the bench.
+date path **−87%** (18.2μs → 2.4μs) in the bench (Linux, `benchmarks/docker`).
 
 ### Serializing a curated subset
 
@@ -168,8 +176,8 @@ The output is byte-identical to `Arr::only($model->attributesToArray(), $keys)` 
 whole greased array path (date tier included) runs over the narrowed set, and the
 model's `visible`/`hidden` config is still honored. It is **non-mutating**: unlike
 `setVisible($keys)->attributesToArray()` it restores the model's visible list before
-returning (and skips a `clone`). Picking 3 of 23 cast-heavy columns, it ran **−87%**
-against the naive serialize-all-then-filter (175.8μs → 22.1μs).
+returning (and skips a `clone`). Picking 3 of 23 cast-heavy columns, it ran **−91%**
+against the naive serialize-all-then-filter (43.3μs → 3.9μs; Linux, `benchmarks/docker`).
 
 ## Beyond Eloquent: a faster event dispatcher
 
@@ -191,12 +199,12 @@ already-registered listeners) and points Eloquent's dispatcher at it too. Regist
 carried over either way, but going first means listeners other providers add land
 directly on the greased dispatcher and nothing has captured the original. On an
 event-dense request (a page render's worth of dispatches) this roughly **halves**
-the event overhead — ~−56% when most events have no listener, ~−47% per-request when
-non-trivial wildcard listeners (model observers, package patterns) are registered.
-On a Blade/Livewire render the win is larger still — **−92%** — because the framework
-fires view events (`creating:`/`composing:`) through a `hasListeners()` guard, and
-that presence check is memoized, so re-rendering the same components stops re-scanning
-wildcards every time.
+the event overhead — ~−57% when most events have no listener, ~−54% per-request when
+non-trivial wildcard listeners (model observers, package patterns) are registered
+(`EventStormBench`, Linux). The framework also fires view events (`creating:`/`composing:`)
+through a `hasListeners()` guard that the greased dispatcher memoizes, so re-rendering the
+same components stops re-scanning wildcards every time — the win there compounds with the
+render itself, though the exact figure depends on how many observers you register.
 
 ## Benchmarks
 
@@ -213,10 +221,11 @@ prove byte-identical**:
 - **`SuiteBench`** — drives the real SQL roundtrip test suite (migrate → query →
   write → eager-load) through a booted app, so any covered path's cost is tracked.
 
-Representative `CastBench` deltas (vanilla → greased, in-memory, your hardware will
-vary): hydrate −53%, `toArray` −53%, set+dirty −44%, read-all-casts −31%, enum cast
-−58%. The event dispatcher tier is measured separately by `DispatcherBench` and
-`EventStormBench`.
+Representative `CastBench` deltas (vanilla → greased, in-memory, Linux/`benchmarks/docker`,
+your hardware will vary): hydrate −34%, `toArray` −47%, set+dirty −39%, read-all-casts
+−27%, enum cast −48%; date serialization (timestamps / `datetime` casts) −87% / −89%. The
+event dispatcher tier is measured separately by `DispatcherBench` (no-listener −53%,
+with-listeners −18%) and `EventStormBench` (−54% to −57% per render-shaped storm).
 
 ## Requirements
 
