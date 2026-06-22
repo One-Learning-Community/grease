@@ -21,7 +21,11 @@ All notable changes to `grease` are documented here. The format is based on
   `Grease\View\GreaseViewServiceProvider`, which `extend`s `blade.compiler` via
   `Compiler::fromBase()` (registered directives/components carry over). Behaviour-
   identical: the prop/attribute partition is unchanged, asserted A/B against the stock
-  compiler. **−59%** on the prop-resolution block (316 μs → 129 μs, `PropResolutionBench`).
+  compiler. **−59%** on the prop-resolution block (316 μs → 129 μs, `PropResolutionBench`)
+  — which is **~−4 to −5%** on a *full* 1,000-anonymous-component render (`benchmarks/blade.php`,
+  Taylor's 2024 challenge), since `@props` is only a slice of a component's total render
+  cost. Real, free, and parity-safe; it compounds with the other tiers rather than
+  halving a render on its own.
 
 ### Changed
 
