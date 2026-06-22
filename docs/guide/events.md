@@ -30,8 +30,8 @@ so asking "is anyone listening?" can cost more than just telling nobody. But the
 framework's own view layer gates exactly that way and you can't change it from a
 package — so Grease memoizes `hasListeners()` itself: the check the framework already
 pays for becomes one scan per distinct event name instead of one per call. That's why
-the Blade/Livewire render path — the same view names recurring across roundtrips —
-sees the biggest win of the whole tier.
+the Blade/Livewire render path — the same view names recurring across roundtrips — is
+where this memoization pays off most.
 
 ## Behaviour-identical, by test
 
@@ -46,16 +46,17 @@ of A/B tests against the stock dispatcher.
 | --- | :---: |
 | dispatch with no listener | **−53%** |
 | dispatch with listeners | **−18%** |
-| event-dense request, warm | **−56%** |
-| event-dense request, cold (non-trivial wildcards) | **−47%** |
-| view-event render, Blade/Livewire | **−92%** |
+| event-dense request, warm | **−57%** |
+| event-dense request, cold (non-trivial wildcards) | **−54%** |
 
 On an event-dense request — a page render's worth of dispatches — it roughly
-**halves** the event overhead, and on a Blade/Livewire render (view events fired
-through the `hasListeners()` guard, the same components re-rendered across roundtrips)
-it cuts **−92%** — 557 μs → 47 μs in `ViewEventBench`. An Eloquent-only benchmark
-*understates* this tier on purpose: its real value is app-wide event traffic that a
-model benchmark never touches.
+**halves** the event overhead. There's a further win on a Blade/Livewire render: view
+events fire through the `hasListeners()` guard (the same components re-rendered across
+roundtrips), and the greased dispatcher memoizes that check — so re-rendering stops
+re-scanning wildcards every time. How much that's worth depends on how many
+observer/wildcard listeners you register. An Eloquent-only benchmark *understates* this
+tier on purpose: its real value is app-wide event traffic that a model benchmark never
+touches.
 
 ## Opt in
 

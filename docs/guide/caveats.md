@@ -49,7 +49,7 @@ isn't itself an `encrypted:*` type — won't decrypt on a greased model.
 protected $casts = ['ssn' => 'encrypted:string'];
 ```
 
-Nobody overrides `isEncryptedCastable()` on purpose.
+This is an undocumented internal — there's no idiomatic reason to override it.
 
 ## What defers to vanilla (correct, just unaccelerated)
 

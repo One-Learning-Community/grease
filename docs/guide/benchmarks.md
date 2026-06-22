@@ -11,10 +11,10 @@ same models with `HasGrease`. Output is byte-identical.
 
 | Endpoint (one request, incl. SQL) | vanilla | + Grease | Δ |
 | --- | ---: | ---: | :---: |
-| index: list 100 users → JSON | 10.9 ms | 2.9 ms | **−73%** |
-| eager: 100 posts with author → JSON | 20.8 ms | 5.5 ms | **−74%** |
-| bulk: load 150, mutate, save | 34.8 ms | 27.7 ms | **−20%** |
-| show one post (with author) | 0.38 ms | 0.21 ms | **−45%** |
+| index: list 100 users → JSON | 3.12 ms | 0.69 ms | **−78%** |
+| eager: 100 posts with author → JSON | 6.01 ms | 1.39 ms | **−77%** |
+| bulk: load 150, mutate, save | 7.25 ms | 5.90 ms | **−18%** |
+| show one post (with author) | 0.11 ms | 0.06 ms | **−47%** |
 
 ```bash
 php benchmarks/realworld.php
@@ -34,12 +34,12 @@ delta directly. Representative deltas (vanilla → greased):
 
 | Operation | Δ |
 | --- | :---: |
-| hydrate a row | **−53%** |
-| `toArray()` (serialize) | **−53%** |
-| set + dirty-check | **−44%** |
-| read all casts | **−31%** |
-| read an enum cast | **−58%** |
-| date serialization (per date column) | **~−92%** |
+| hydrate a row | **−34%** |
+| `toArray()` (serialize) | **−47%** |
+| set + dirty-check | **−39%** |
+| read all casts | **−27%** |
+| read an enum cast | **−48%** |
+| date serialization (timestamps / `datetime` casts) | **−87% / −89%** |
 
 ```bash
 composer bench
@@ -52,7 +52,7 @@ few timestamps across a hundred rows, that single tier is most of the win.
 Building your array by hand — Scout's `toSearchableArray`, a `JsonResource`, an
 export — bypasses `toArray()` and so this tier. The
 [serialization helpers](/guide/serialization-helpers) hand it back: `greaseSerializeDate()`
-(−80% on a hand-picked date) and `greaseSerializeOnly()` (−88% on a curated subset of a
+(−86% on a hand-picked date) and `greaseSerializeOnly()` (−91% on a curated subset of a
 wide model). Validate both with `php benchmarks/serialize_helpers.php`.
 
 ## Beyond Eloquent: the dispatcher
@@ -64,17 +64,16 @@ not per-model:
 | --- | :---: |
 | dispatch with no listener | **−53%** |
 | dispatch with listeners | **−18%** |
-| event-dense request, warm | **−56%** |
-| event-dense request, cold (with wildcards) | **−47%** |
-| view-event render, Blade/Livewire (`ViewEventBench`) | **−92%** |
+| event-dense request, warm | **−57%** |
+| event-dense request, cold (with wildcards) | **−54%** |
 
-On an event-dense request it roughly **halves** the event overhead. The view-event
-row is the one that matters for a Blade- or Livewire-heavy page: the framework fires
-`creating:`/`composing:` through a `hasListeners()` guard (`callCreator`/`callComposer`),
-not a bare `dispatch()`, and memoizing that presence check collapses a per-render
-wildcard re-scan into one scan per distinct view name — 557 μs → 47 μs on a
-Livewire-shaped render (same components re-rendered across roundtrips) with realistic
-wildcards registered. See [The Event Dispatcher](/guide/events).
+On an event-dense request it roughly **halves** the event overhead. There's a further
+win on a Blade- or Livewire-heavy page: the framework fires `creating:`/`composing:`
+through a `hasListeners()` guard (`callCreator`/`callComposer`), not a bare `dispatch()`,
+and the greased dispatcher memoizes that presence check — so re-rendering the same
+components stops re-scanning wildcards every time. How much that's worth depends on how
+many observer/wildcard listeners you've registered. See
+[The Event Dispatcher](/guide/events).
 
 ## How to read these honestly
 
@@ -94,7 +93,7 @@ percentages as "Grease's share of the Eloquent-bound work," not "your p99 will d
 larger denominator.
 :::
 
-- **Per-op vs per-request.** A −53% on `hydrate` is a per-operation figure; it
+- **Per-op vs per-request.** A −34% on `hydrate` is a per-operation figure; it
   becomes a per-request figure only multiplied by how many rows you hydrate. The
   end-to-end table is the one that includes your SQL.
 - **The win is workload-shaped.** Grease accelerates hydration, casting, and
@@ -107,7 +106,7 @@ larger denominator.
 ## Reproduce everything
 
 ```bash
-composer test                       # 225 parity tests — the byte-identical contract
+composer test                       # 254 parity tests — the byte-identical contract
 composer bench                      # phpbench: CastBench (per-op A/B) + SuiteBench (SQL)
 php benchmarks/realworld.php         # the end-to-end macro above
 php benchmarks/serialize_helpers.php # greaseSerializeDate / greaseSerializeOnly, A/B

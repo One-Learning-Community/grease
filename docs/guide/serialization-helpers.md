@@ -93,11 +93,11 @@ Stand-alone bench, fresh-hydrated per op (a request serializes each row once), U
 
 | Swap (byte-identical) | before | after | Δ |
 | --- | ---: | ---: | :---: |
-| `?->toJSON()` → `greaseSerializeDate()` (2 timestamps, thin model) | 64.0 µs | 12.7 µs | **−80%** |
-| `Arr::only(toArray, keys)` → `greaseSerializeOnly()` (3 of 23 cols) | 181.6 µs | 22.1 µs | **−88%** |
+| `?->toJSON()` → `greaseSerializeDate()` (2 timestamps, thin model) | 17.2 µs | 2.4 µs | **−86%** |
+| `Arr::only(toArray, keys)` → `greaseSerializeOnly()` (3 of 23 cols) | 43.1 µs | 3.7 µs | **−91%** |
 
 `greaseSerializeOnly` lands within noise of mutating
-`setVisible()->attributesToArray()` (22.2 µs) — the win is the skipped serialization
+`setVisible()->attributesToArray()` (3.66 µs) — the win is the skipped serialization
 plus non-mutation, so no extra per-key-set machinery was added.
 
 ::: warning Micro-benchmarks flatter, and understate, in different directions
@@ -133,13 +133,15 @@ php benchmarks/serialize_helpers.php 25        # more rounds, tighter median
 1. greaseSerializeDate()  —  pick 2 timestamps off a thin model
    output: ["2026-03-04T09:10:11.000000Z","2024-12-31T23:59:59.000000Z"]
 
-  idiomatic  ?->toJSON()                64.01 µs
-  greaseSerializeDate()                 12.68 µs   -80.2%
+  idiomatic  ?->toJSON()                17.21 µs
+  greaseSerializeDate()                  2.40 µs   -86.0%
 
 2. greaseSerializeOnly()  —  pick 3 of 23 columns off a wide model
-  naive  Arr::only(toArray, keys)      181.61 µs
-  setVisible()->attributesToArray()     22.15 µs   -87.8%
-  greaseSerializeOnly()                 22.06 µs   -87.9%
+   output: {"str_val":"100","status_val":"active","created_at":"2026-01-01T00:00:00.000000Z"}
+
+  naive  Arr::only(toArray, keys)       43.06 µs
+  setVisible()->attributesToArray()      3.66 µs   -91.5%
+  greaseSerializeOnly()                  3.71 µs   -91.4%
 ```
 
 The same pair is also timed under phpbench, with a parity guard in `setUp`:
