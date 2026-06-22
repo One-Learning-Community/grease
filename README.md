@@ -1,6 +1,9 @@
 # Grease
 
 [![tests](https://github.com/One-Learning-Community/grease/actions/workflows/tests.yml/badge.svg)](https://github.com/One-Learning-Community/grease/actions/workflows/tests.yml)
+[![Latest Version](https://img.shields.io/packagist/v/onelearningcommunity/grease.svg)](https://packagist.org/packages/onelearningcommunity/grease)
+[![Total Downloads](https://img.shields.io/packagist/dt/onelearningcommunity/grease.svg)](https://packagist.org/packages/onelearningcommunity/grease)
+[![License](https://img.shields.io/packagist/l/onelearningcommunity/grease.svg)](LICENSE)
 
 **Opt-in performance for Laravel's hot paths — built from optimizations declined upstream.**
 
