@@ -73,8 +73,12 @@ note below on why not macOS.
 > **Why Linux/Docker, not macOS.** macOS distorts these: the `/var`→`/private/var`
 > symlink confuses opcache's realpath keying and CLI opcache behaves unlike production,
 > which inflates filesystem-bound work and the microbench baselines. The numbers here are
-> from [`benchmarks/docker`](benchmarks/docker) (Linux). Your hardware will differ —
-> reproduce on your target; the harness makes that one command.
+> from [`benchmarks/docker`](benchmarks/docker) (Linux/glibc). Your **build** will differ,
+> not just your hardware: CPU, libc (glibc vs musl), and the memory allocator all move the
+> numbers — and Grease's wins are mostly *allocation* wins, so that axis matters most. (We
+> measured ~3–6 pt swings on alloc-heavy ops between glibc and musl; see `Dockerfile.alpine`.)
+> Treat the figures as representative, not a promise — reproduce on your target; the harness
+> makes that one command.
 
 Reproduce: `docker build -t grease-bench benchmarks/docker && docker run --rm -v "$PWD":/app -w /app grease-bench php benchmarks/realworld.php`.
 

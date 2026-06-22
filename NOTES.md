@@ -169,6 +169,16 @@ The Docker box is Linux/arm64, so absolute µs and CPU-bound `%`s still vary by 
 harness is the source of truth, reproduce on your target. Earlier macOS figures are kept in
 git history for contrast.
 
+**A benchmark is a property of the build, not the code.** Measured the same CastBench across
+libc/allocator variants on the same machine (`Dockerfile` glibc vs `Dockerfile.alpine` musl):
+the deltas swung **~3–6 pt** on allocation-heavy ops (read −26.5%→−33%, toArray −46%→−52%
+glibc→musl), because Grease's wins are allocation wins and musl's allocator makes the vanilla
+arm pay more — so the *same optimization looks bigger on musl*. jemalloc via `LD_PRELOAD`
+didn't even run (`munmap_chunk(): invalid pointer` — incompatible with PHP's JIT on this
+build; "drop-in allocator" is a myth). And run-to-run under machine load swung glibc setDirty
+−39%↔−27% — bigger than the libc difference. Lesson: quote a range and ship the harness; never
+quote a single number as if it were portable.
+
 - **Blade render tier** (`blade.php`, 1,000 anonymous components, parity ✔): @props+merge,
   **simple −38%, rich −29.5%** (vanilla 16.1/23.1 ms → 9.9/16.2 ms). (Mac read this as
   −24–27%.) The remaining cost is the compiled-view body (~60–70%, mostly real template
