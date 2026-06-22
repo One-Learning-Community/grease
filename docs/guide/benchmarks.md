@@ -49,6 +49,12 @@ The standout is **date serialization**: skipping the Carbon parse-and-reformat
 round-trip saves roughly 27 µs *per date column per row*. On an API response with a
 few timestamps across a hundred rows, that single tier is most of the win.
 
+Building your array by hand — Scout's `toSearchableArray`, a `JsonResource`, an
+export — bypasses `toArray()` and so this tier. The
+[serialization helpers](/guide/serialization-helpers) hand it back: `greaseSerializeDate()`
+(−80% on a hand-picked date) and `greaseSerializeOnly()` (−88% on a curated subset of a
+wide model). Validate both with `php benchmarks/serialize_helpers.php`.
+
 ## Beyond Eloquent: the dispatcher
 
 Measured separately (`DispatcherBench`, `EventStormBench`), because it's app-wide,
@@ -95,9 +101,10 @@ larger denominator.
 ## Reproduce everything
 
 ```bash
-composer test                  # 208 parity tests — the byte-identical contract
-composer bench                 # phpbench: CastBench (per-op A/B) + SuiteBench (SQL)
-php benchmarks/realworld.php    # the end-to-end macro above
+composer test                       # 225 parity tests — the byte-identical contract
+composer bench                      # phpbench: CastBench (per-op A/B) + SuiteBench (SQL)
+php benchmarks/realworld.php         # the end-to-end macro above
+php benchmarks/serialize_helpers.php # greaseSerializeDate / greaseSerializeOnly, A/B
 ```
 
 Same fixtures, both sides. A bench runs exactly what a test proves identical.

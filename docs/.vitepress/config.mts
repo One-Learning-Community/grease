@@ -56,6 +56,7 @@ export default defineConfig({
           text: 'Under the Hood',
           items: [
             { text: 'How It Works', link: '/guide/how-it-works' },
+            { text: 'Serialization Helpers', link: '/guide/serialization-helpers' },
             { text: 'Benchmarks', link: '/guide/benchmarks' },
             { text: 'The Event Dispatcher', link: '/guide/events' },
           ],
