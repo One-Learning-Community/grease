@@ -85,6 +85,22 @@ original.
 
 See [The Event Dispatcher](/guide/events) for what it does and what it's worth.
 
+## The faster Blade compiler (optional)
+
+Grease also greases the Blade component render path — the `@props` resolution and the
+`$attributes->merge()` every component pays on every render. A third axis again, opt-in
+and **not** auto-discovered:
+
+```php
+// bootstrap/providers.php, or the providers array in config/app.php
+Grease\View\GreaseViewServiceProvider::class,
+```
+
+It swaps the `blade.compiler`; views recompile to the tighter form on their next change,
+or immediately after `php artisan view:clear`. Output stays byte-identical.
+
+See [Blade Components](/guide/blade) for what it does and what it's worth.
+
 ## Verify nothing changed
 
 The promise is byte-identical output, so the best "did it work?" check is that your

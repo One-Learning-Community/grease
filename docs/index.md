@@ -35,6 +35,9 @@ features:
   - icon: 🔌
     title: Beyond Eloquent — a faster dispatcher
     details: "A drop-in event dispatcher that speeds up every dispatch app-wide — model events, views, cache, your own. −53% on no-listener dispatch; roughly halves the event overhead of a render-dense request. A second reason to install Grease, even if Eloquent isn't your bottleneck."
+  - icon: 🍞
+    title: Beyond Eloquent — faster Blade
+    details: "A greased Blade compiler for the @props + attribute-merge every component pays per render. −38% on Taylor's 1,000-anonymous-component challenge, byte-identical HTML. Honest scope: a third off, not the halving he asked — measured, not promised."
   - icon: 🧩
     title: Zero framework changes
     details: Non-greased models run pure vanilla Eloquent — Grease adds zero cost to anything that doesn't opt in. PHP 8.2+, Laravel 12 / 13.

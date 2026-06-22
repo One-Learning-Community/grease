@@ -1,8 +1,17 @@
 # Benchmarks
 
-Numbers you can trust come from a method you can see. Everything below runs over the
-**same fixtures the parity tests prove byte-identical**, so each benchmark times
-exactly the behaviour a test certifies. Reproduce any of it from the repo.
+> *"I only trust a benchmark I've falsified myself."* — not Churchill
+
+So don't take ours. Numbers you can trust come from a method you can see — and every
+figure below ships with the harness that made it, so you can run it on the hardware,
+libc, and allocator you actually deploy on. Everything runs over the **same fixtures the
+parity tests prove byte-identical**, so each benchmark times exactly the behaviour a test
+certifies.
+
+All numbers here are measured on **Linux** via the repo's Docker image
+([`benchmarks/docker`](#a-benchmark-is-a-property-of-the-build)) — not macOS, which
+distorts filesystem- and allocation-bound work (the [why](#a-benchmark-is-a-property-of-the-build)
+is below).
 
 ## End to end, per request (incl. SQL)
 
@@ -75,6 +84,27 @@ components stops re-scanning wildcards every time. How much that's worth depends
 many observer/wildcard listeners you've registered. See
 [The Event Dispatcher](/guide/events).
 
+## Beyond Eloquent: Blade components
+
+A third axis again — the render path, not the model. On
+[Taylor's 1,000-anonymous-component challenge](/guide/blade), output asserted
+byte-identical before timing (`benchmarks/blade.php`):
+
+| Component shape | Δ |
+| --- | :---: |
+| simple (initials + one attribute merge) | **−38%** |
+| rich (5 props, `@php`, conditionals, slots) | **−29.5%** |
+
+```bash
+php benchmarks/blade.php
+```
+
+That's the `@props` resolution and the `$attributes->merge()` pipeline — the two costs
+every component pays per render — not the halving Taylor asked for. The rest is the
+template executing and the per-component resolution machinery, where no clean,
+parity-safe win has surfaced yet. The honest scope, the dead ends we measured and
+rejected, and how to profile it are in [Blade Components](/guide/blade).
+
 ## How to read these honestly
 
 This package was built measure-first, and the docs hold the same line. A few things
@@ -103,13 +133,43 @@ larger denominator.
   noise, it was parked, not shipped, and that's recorded openly in the repo's notes.
   The figures here are the ones that cleared the bar.
 
+## A benchmark is a property of the build
+
+Why Linux, not the Mac these were first written on: macOS's `/var`→`/private/var`
+symlink confuses opcache's realpath keying and CLI opcache behaves unlike production. It
+*inflated* the per-op microbench wins and *understated* Blade — the `is_file()` it ranked
+at ~8% of a render is ~3% on Linux. (Xdebug lied too: it ranked `extract` at ~14% of a
+render when a micro proved it ~0.6% — it disables JIT and mis-attributes internal-op
+cost. Use a sampling profiler; the repo ships an Excimer harness.)
+
+But even "Linux" isn't one number. The same `CastBench`, same machine, **only the libc
+and allocator changed**:
+
+| Op | glibc | musl |
+| --- | :---: | :---: |
+| read all casts | −26.5% | **−33%** |
+| `toArray()` | −46% | **−52%** |
+
+Grease's wins are *allocation* wins, and musl's allocator makes the vanilla arm pay more
+— so the same optimization reads bigger on musl. (jemalloc via `LD_PRELOAD` didn't even
+run — it crashed PHP's JIT; "drop-in allocator" is a myth. And run-to-run under load swung
+glibc `setDirty` −39%↔−27%, wider than the libc gap.) **Treat the figures as
+representative, not a promise.** Reproduce on *your* build — it's one command.
+
 ## Reproduce everything
 
 ```bash
-composer test                       # 254 parity tests — the byte-identical contract
+# Linux, the canonical environment (glibc; swap Dockerfile.alpine for musl):
+docker build -t grease-bench benchmarks/docker
+docker run --rm -v "$PWD":/app -w /app grease-bench php benchmarks/realworld.php
+
+# or directly, on whatever PHP you have:
+composer test                       # parity tests — the byte-identical contract
 composer bench                      # phpbench: CastBench (per-op A/B) + SuiteBench (SQL)
 php benchmarks/realworld.php         # the end-to-end macro above
+php benchmarks/blade.php             # Taylor's 1,000-component challenge
 php benchmarks/serialize_helpers.php # greaseSerializeDate / greaseSerializeOnly, A/B
+php benchmarks/blade_excimer.php     # honest sampling profile of the render path
 ```
 
 Same fixtures, both sides. A bench runs exactly what a test proves identical.
