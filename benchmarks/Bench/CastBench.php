@@ -49,6 +49,16 @@ class CastBench
         $this->readAll($this->greased);
     }
 
+    public function benchEnumReadVanilla(): void
+    {
+        $this->vanilla->status_val;
+    }
+
+    public function benchEnumReadGreased(): void
+    {
+        $this->greased->status_val;
+    }
+
     public function benchToArrayVanilla(): void
     {
         $this->vanilla->attributesToArray();

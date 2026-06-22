@@ -21,8 +21,12 @@ use Illuminate\Support\Collection as BaseCollection;
  * class); use `mergeCasts()`/`withCasts()` at runtime instead. Custom casts
  * (`CastsAttributes`) — the documented extension point — work unchanged.
  *
- * Built-in primitive/date/json casts are accelerated here; enum, custom-class,
- * and encrypted casts defer to the framework's own (correct) handling.
+ * Built-in primitive/date/json casts are accelerated here, and enum casts get a
+ * fast path that skips the redundant parent:: re-walk while delegating the actual
+ * conversion to the framework (so backed/pure/null/invalid handling is identical).
+ * Custom-class (CastsAttributes) and encrypted casts still defer to the framework's
+ * own (correct) handling — class-castable reads are already object-cached and
+ * encrypted reads are decryption-bound, so a flyweight buys ~nothing there.
  */
 trait HasGreasedCasts
 {
@@ -30,6 +34,34 @@ trait HasGreasedCasts
 
     /** Built-in cast flyweights, shared and keyed by normalized cast type. */
     protected static array $greaseCasters = [];
+
+    /**
+     * Per-process map: resolved cast type -> whether it is an enum. Keyed by the
+     * type string (a class name), not by `[class][key]`, so it is divergence- and
+     * STI-safe for free — an enum class either exists or it doesn't, regardless of
+     * which model or instance uses it.
+     */
+    protected static array $greaseEnumTypes = [];
+
+    /**
+     * Synonym cast types that resolve to an identical read flyweight. Folding
+     * them onto one canonical key means `real`/`float`/`double` (etc.) share a
+     * single `ClosureCast` instead of building three byte-identical copies. The
+     * flyweights are stateless and the synonym arms in `greaseBuildCaster()` are
+     * the same closure, so this is observationally identical — pure dedup.
+     * `decimal` is deliberately absent: it carries a per-call precision parameter
+     * and is its own canonical key.
+     */
+    private const GREASE_CAST_ALIASES = [
+        'integer' => 'int',
+        'real' => 'float',
+        'double' => 'float',
+        'boolean' => 'bool',
+        'array' => 'json',
+        'json:unicode' => 'json',
+        'custom_datetime' => 'datetime',
+        'immutable_custom_datetime' => 'immutable_datetime',
+    ];
 
     protected function castAttribute($key, $value)
     {
@@ -39,14 +71,26 @@ trait HasGreasedCasts
             return $value;
         }
 
-        $caster = static::$greaseCasters[$castType] ??= $this->greaseBuildCaster($castType);
+        $canonical = self::GREASE_CAST_ALIASES[$castType] ?? $castType;
+        $caster = static::$greaseCasters[$canonical] ??= $this->greaseBuildCaster($canonical);
 
         if ($caster !== null) {
             return $caster->get($this, $key, $value, $this->attributes);
         }
 
-        // enum / custom-class / encrypted — outside the built-in subset; defer to
-        // the framework's flyweight-free handling (still correct, just unaccelerated).
+        // Enum fast path. Keyed by the *resolved* cast type (a class name), exactly
+        // like $greaseCasters, so it is divergence-safe for free: a runtime cast
+        // change moves getCastType($key) to a different entry. The conversion is
+        // delegated to the framework's own getEnumCastableAttributeValue(), so
+        // backed/pure/instanceof/null/invalid handling stays byte-identical — we
+        // only skip the redundant parent:: re-walk (2nd getCastType, the encrypted
+        // probe, the 14-arm switch, and isEnumCastable).
+        if (static::$greaseEnumTypes[$castType] ??= enum_exists($castType)) {
+            return $this->getEnumCastableAttributeValue($key, $value);
+        }
+
+        // custom-class (CastsAttributes) / encrypted — outside the built-in subset;
+        // defer to the framework's handling (still correct, just unaccelerated).
         return parent::castAttribute($key, $value);
     }
 
