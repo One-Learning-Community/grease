@@ -1,6 +1,6 @@
 {
     "name": "onelearningcommunity/grease",
-    "description": "Opt-in performance optimizations for Eloquent's hot path — the wins upstream won't merge. Zero core changes, byte-identical output.",
+    "description": "Opt-in performance optimizations for Eloquent's hot path, built from optimizations declined upstream. Zero core changes, byte-identical output.",
     "keywords": ["laravel", "eloquent", "performance", "orm", "optimization"],
     "homepage": "https://github.com/onelearningcommunity/grease",
     "license": "MIT",
@@ -12,12 +12,12 @@
     ],
     "require": {
         "php": "^8.2",
-        "illuminate/database": "^11.0 || ^12.0 || ^13.0",
-        "illuminate/events": "^11.0 || ^12.0 || ^13.0",
-        "illuminate/support": "^11.0 || ^12.0 || ^13.0"
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/events": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0"
     },
     "require-dev": {
-        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "orchestra/testbench": "^10.0 || ^11.0",
         "phpbench/phpbench": "^1.2",
         "phpunit/phpunit": "^11.0 || ^12.0"
     },
