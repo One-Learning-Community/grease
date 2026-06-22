@@ -1,6 +1,6 @@
 # Grease
 
-[![tests](https://github.com/onelearningcommunity/grease/actions/workflows/tests.yml/badge.svg)](https://github.com/onelearningcommunity/grease/actions/workflows/tests.yml)
+[![tests](https://github.com/One-Learning-Community/grease/actions/workflows/tests.yml/badge.svg)](https://github.com/One-Learning-Community/grease/actions/workflows/tests.yml)
 
 **Opt-in performance for Laravel's hot paths — built from optimizations declined upstream.**
 
