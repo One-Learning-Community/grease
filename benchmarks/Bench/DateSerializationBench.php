@@ -90,4 +90,37 @@ class DateSerializationBench
     {
         $this->greasedCast->attributesToArray();
     }
+
+    // ── The public primitive vs the hand-pick it replaces ─────────────────────
+    //
+    // What a Scout `toSearchableArray` / `JsonResource` writes today is a
+    // per-attribute date access: `$model->created_at?->toJSON()` — which forces the
+    // cast's Carbon parse on every field. `greaseSerializeDate()` is the drop-in.
+    //
+    // Both subjects hydrate the SAME fresh greased model per rev, so the hydration
+    // cost is identical and cancels in the delta — what's left is purely the
+    // primitive's Carbon-parse elimination vs the idiomatic access, not the
+    // hydration tier. Fresh per rev is mandatory: a re-read measures an
+    // already-parsed Carbon (the cast cache) and understates the win to near zero;
+    // the parse is paid once per instance, which is exactly once per serialized row.
+
+    public function benchHandPickDatesIdiomatic(): void
+    {
+        $m = (new GreasedTimestamps)->newFromBuilder(SampleData::timestampsRow());
+
+        $picked = [
+            'created_at' => $m->created_at?->toJSON(),
+            'updated_at' => $m->updated_at?->toJSON(),
+        ];
+    }
+
+    public function benchHandPickDatesPrimitive(): void
+    {
+        $m = (new GreasedTimestamps)->newFromBuilder(SampleData::timestampsRow());
+
+        $picked = [
+            'created_at' => $m->greaseSerializeDate('created_at'),
+            'updated_at' => $m->greaseSerializeDate('updated_at'),
+        ];
+    }
 }

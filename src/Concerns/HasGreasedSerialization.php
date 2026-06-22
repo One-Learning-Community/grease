@@ -130,6 +130,58 @@ trait HasGreasedSerialization
     }
 
     /**
+     * Serialize one stored datetime the way `attributesToArray()` would — without
+     * routing the whole model through it. This is the array-builder's date fast
+     * path exposed as a primitive, so code that *hand-picks* attributes (Scout
+     * `toSearchableArray`, a `JsonResource`, an export) can capture the date-tier
+     * win it would otherwise leave on the table by reading the attribute directly.
+     *
+     * The return is **byte-identical** to the composition Eloquent applies to a
+     * timestamp / plain `datetime` cast on its way into the array:
+     *
+     *     $this->serializeDate($this->asDateTime($this->attributes[$key]))
+     *
+     * which for the default serializer is the `toJSON()` form
+     * (`2026-01-01T00:00:00.000000Z`). When the per-class probe certifies a fast
+     * path (UTC-default ISO, or a storage-format `serializeDate`) the Carbon
+     * round-trip is skipped; otherwise — an uncertified class, or a value that
+     * isn't a plain second-precision storage string — it falls back to the exact
+     * vanilla composition, so it is always correct, only sometimes faster.
+     *
+     * FORMAT NOTE: this is the `toJSON` shape, NOT `toIso8601String()` (`+00:00`,
+     * no microseconds) or `toDateTimeString()` (storage form) — it is a drop-in
+     * only for a field already emitting the array/JSON serialization. Eligible for
+     * the fast path are exactly the attributes the array builder fast-paths:
+     * timestamps and plain `datetime` / `immutable_datetime` casts. A `date` cast,
+     * a custom-format datetime, or a custom `CastsAttributes::serialize` is not
+     * something this primitive can reproduce — read those through the model.
+     */
+    public function greaseSerializeDate(string $key): ?string
+    {
+        $raw = $this->attributes[$key] ?? null;
+
+        if ($raw === null) {
+            return null;
+        }
+
+        // Fast path only for a raw, second-precision storage string under a
+        // certified class plan — mirroring addDateAttributesToArray exactly.
+        if (is_string($raw) && preg_match(self::GREASE_DATE_SHAPE, $raw) === 1) {
+            $plan = $this->greaseDateSerializePlan();
+
+            if ($plan !== false) {
+                return $plan === 'utc_iso'
+                    ? strtr($raw, ' ', 'T').'.000000Z'
+                    : $raw; // 'identity'
+            }
+        }
+
+        // Anything uncertified, or a Carbon/date-only/sub-second value: defer to
+        // the byte-for-byte vanilla composition.
+        return $this->serializeDate($this->asDateTime($raw));
+    }
+
+    /**
      * The certified serialize strategy for this class under the live timezone and
      * connection: 'identity', 'utc_iso', or false (defer to vanilla). Keyed by
      * timezone + connection because the default-formatter rewrite is only valid at

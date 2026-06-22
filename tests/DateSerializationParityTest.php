@@ -468,6 +468,116 @@ class DateSerializationParityTest extends TestCase
         );
     }
 
+    /**
+     * The drop-in contract for the public primitive: greaseSerializeDate($key) on a
+     * greased model returns exactly what vanilla's own attributesToArray() emits for
+     * that key — the value hand-pickers would otherwise have to route the whole model
+     * through attributesToArray() (or re-derive by hand) to obtain.
+     */
+    private function assertPrimitiveMatchesVanilla(string $vanilla, string $greased, array $row, string $key): void
+    {
+        $v = (new $vanilla)->newFromBuilder($row);
+        $g = (new $greased)->newFromBuilder($row);
+
+        $expected = $v->attributesToArray()[$key];
+
+        $this->assertSame($expected, $g->greaseSerializeDate($key), "key=$key");
+
+        // And independently equal to the raw vanilla composition it claims to be.
+        if (is_string($row[$key] ?? null)) {
+            $compose = (fn () => $this->serializeDate($this->asDateTime($row[$key])))->call($v);
+            $this->assertSame($compose, $g->greaseSerializeDate($key), "compose key=$key");
+        }
+    }
+
+    public function test_primitive_utc_iso_matches_vanilla_serialization(): void
+    {
+        date_default_timezone_set('UTC');
+        GreasedTs::flushGreaseBlueprint();
+
+        $g = (new GreasedTs)->newFromBuilder($this->tsRow());
+        $this->assertSame('utc_iso', $this->planOf($g));
+
+        $this->assertPrimitiveMatchesVanilla(VanillaTs::class, GreasedTs::class, $this->tsRow(), 'created_at');
+        $this->assertPrimitiveMatchesVanilla(VanillaTs::class, GreasedTs::class, $this->tsRow(), 'updated_at');
+    }
+
+    public function test_primitive_identity_strategy_matches_vanilla(): void
+    {
+        // Storage-format serializer → the primitive returns the stored string verbatim.
+        foreach (['UTC', 'America/New_York', 'Asia/Kolkata'] as $tz) {
+            date_default_timezone_set($tz);
+            GreasedStorageFmt::flushGreaseBlueprint();
+
+            $g = (new GreasedStorageFmt)->newFromBuilder($this->tsRow());
+            $this->assertSame('identity', $this->planOf($g), "tz=$tz");
+
+            $this->assertPrimitiveMatchesVanilla(VanillaStorageFmt::class, GreasedStorageFmt::class, $this->tsRow(), 'created_at');
+        }
+    }
+
+    public function test_primitive_defers_under_non_utc_but_still_matches_vanilla(): void
+    {
+        // Uncertified class: the primitive falls back to the exact vanilla composition,
+        // so it is still byte-identical — just not Carbon-free.
+        date_default_timezone_set('America/New_York');
+        GreasedTs::flushGreaseBlueprint();
+
+        $g = (new GreasedTs)->newFromBuilder($this->tsRow());
+        $this->assertFalse($this->planOf($g));
+
+        $this->assertPrimitiveMatchesVanilla(VanillaTs::class, GreasedTs::class, $this->tsRow(), 'created_at');
+    }
+
+    public function test_primitive_on_datetime_cast_matches_vanilla(): void
+    {
+        date_default_timezone_set('UTC');
+        GreasedDtCast::flushGreaseBlueprint();
+
+        // Plain datetime / immutable_datetime casts are eligible; the certified plan
+        // (probing serializeDate(asDateTime(...))) is what governs them too.
+        $this->assertPrimitiveMatchesVanilla(VanillaDtCast::class, GreasedDtCast::class, $this->dtCastRow(), 'event_at');
+        $this->assertPrimitiveMatchesVanilla(VanillaDtCast::class, GreasedDtCast::class, $this->dtCastRow(), 'archived_at');
+    }
+
+    public function test_primitive_null_returns_null(): void
+    {
+        date_default_timezone_set('UTC');
+        GreasedTs::flushGreaseBlueprint();
+
+        $g = (new GreasedTs)->newFromBuilder($this->tsRow(['updated_at' => null]));
+        $this->assertNull($g->greaseSerializeDate('updated_at'));
+
+        // Vanilla emits null for a null timestamp too.
+        $v = (new VanillaTs)->newFromBuilder($this->tsRow(['updated_at' => null]));
+        $this->assertNull($v->attributesToArray()['updated_at']);
+    }
+
+    public function test_primitive_per_value_defers_match_vanilla(): void
+    {
+        // Sub-second, date-only, and a live Carbon value each bypass the fast rewrite
+        // (per-value shape guard) and must still equal vanilla.
+        date_default_timezone_set('UTC');
+        GreasedTs::flushGreaseBlueprint();
+
+        $this->assertPrimitiveMatchesVanilla(
+            VanillaTs::class, GreasedTs::class,
+            $this->tsRow(['created_at' => '2026-03-04 09:10:11.123456']), 'created_at'
+        );
+        $this->assertPrimitiveMatchesVanilla(
+            VanillaTs::class, GreasedTs::class,
+            $this->tsRow(['created_at' => '2026-03-04']), 'created_at'
+        );
+
+        // A Carbon instance sitting in the attributes bag (e.g. a freshly-set value).
+        $instant = Carbon::createFromFormat('Y-m-d H:i:s', '2026-03-04 09:10:11');
+        $v = (new VanillaTs)->newFromBuilder($this->tsRow());
+        $g = (new GreasedTs)->newFromBuilder($this->tsRow());
+        $v->created_at = clone $instant;
+        $g->created_at = clone $instant;
+        $this->assertSame($v->attributesToArray()['created_at'], $g->greaseSerializeDate('created_at'));
+    }
+
     public function test_plan_does_not_go_stale_across_a_timezone_change(): void
     {
         // Build the plan under UTC (certifies utc_iso)...

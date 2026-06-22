@@ -6,6 +6,18 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **`greaseSerializeDate(string $key): ?string`** on `HasGreasedSerialization` — the
+  date-serialization tier's fast path exposed as a standalone primitive, so code that
+  *hand-picks* attributes (Scout `toSearchableArray`, a `JsonResource`, an export)
+  captures the date win without routing the whole model through `attributesToArray()`.
+  Returns byte-identical output to `serializeDate(asDateTime($this->attributes[$key]))`
+  (the `toJSON` form), reusing the existing per-class probe — certified classes skip
+  the Carbon round-trip, everything else defers to the exact vanilla composition.
+  Eligible for timestamps and plain `datetime` / `immutable_datetime` casts;
+  −80% on the hand-pick date-serialization path (62.8μs → 12.3μs, fresh-hydrated).
+
 ## [0.1.0] - 2026-06-22
 
 First release. Opt-in performance for Laravel's hot paths, with output asserted

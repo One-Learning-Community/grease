@@ -124,6 +124,31 @@ models that don't use it.
 | `HasGreasedCasts`       | per-access cast `switch` → resolved flyweights, incl. an enum fast path (see caveat) |
 | `HasGreasedSerialization` | the Carbon parse-and-reformat round-trip for date serialization (timestamps + `datetime` casts), when a per-class probe proves the output is a byte-identical rewrite |
 
+### Serializing hand-picked dates
+
+`attributesToArray()` is where the date tier fires — but plenty of code builds its
+output array by hand (Scout's `toSearchableArray`, a `JsonResource`, a CSV export),
+reading one attribute at a time and so bypassing the tier entirely. For those,
+`greaseSerializeDate()` exposes the same fast path as a one-attribute primitive:
+
+```php
+public function toSearchableArray(): array
+{
+    return [
+        'title'      => $this->title,
+        'created_at' => $this->greaseSerializeDate('created_at'), // was: $this->created_at?->toJSON()
+    ];
+}
+```
+
+It returns exactly what `attributesToArray()` would emit for that key (the `toJSON`
+form, e.g. `2026-01-01T00:00:00.000000Z`) — byte-identical, just without the
+per-field Carbon parse. It accelerates timestamps and plain
+`datetime` / `immutable_datetime` casts; a `date` cast, custom-format datetime, or
+custom serializer simply falls back to the exact vanilla composition, so it is always
+safe to call. On a fresh-hydrated row, swapping `?->toJSON()` for it cut the hand-pick
+date path **−80%** (62.8μs → 12.3μs) in the bench.
+
 ## Beyond Eloquent: a faster event dispatcher
 
 Grease also ships a drop-in faster event dispatcher (a port of
