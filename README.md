@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/onelearningcommunity/grease/actions/workflows/tests.yml/badge.svg)](https://github.com/onelearningcommunity/grease/actions/workflows/tests.yml)
 
-**Opt-in performance for Laravel's hot paths — the wins upstream won't merge.**
+**Opt-in performance for Laravel's hot paths — built from optimizations declined upstream.**
 
 Grease is a single trait you add to a model. It makes attribute hydration, casting,
 and serialization measurably faster, with **byte-identical output** to vanilla
@@ -32,27 +32,40 @@ hydrated row: it rebuilds the casts array, re-walks a cast `switch`, re-probes
 fresh `ReflectionClass` per `new Model`. None of it changes for the life of the
 class. Grease computes each fact once per class and reuses it.
 
-These optimizations have been proposed to Laravel core repeatedly and declined on
-stability grounds — each one is "marginal in isolation." Individually, maybe.
+These optimizations have been proposed to Laravel core and declined on reasonable
+grounds — each one is "marginal in isolation," and a framework carries a stability
+cost for every branch it adds to everyone's hot path. Individually, maybe.
 **Together, on a real request, they aren't.**
+
+The attempts span Laravel 9 through 13, because the wins kept measuring as real —
+attribute casting ([#43554](https://github.com/laravel/framework/pull/43554),
+[#60550](https://github.com/laravel/framework/pull/60550)), `getDateFormat()` caching
+([#55129](https://github.com/laravel/framework/pull/55129)), the event dispatcher
+([#51184](https://github.com/laravel/framework/pull/51184)). An opt-in package is the
+right home for a change that's a clear win for some apps and unnecessary weight for the
+framework. Grease is where this work lives now.
 
 ## Benchmarks
 
-Real SQLite, real queries, real controller-shaped workloads — **end-to-end per
+In-memory SQLite, real queries, controller-shaped workloads — **end-to-end per
 request, including SQL.** Vanilla Eloquent vs. the same models with `HasGrease`.
 Output is byte-identical (asserted across every cast type and workload).
 
-| Endpoint (one request, incl. SQL) | vanilla | + Grease |   Δ    |
-| --------------------------------- | ------: | -------: | :----: |
-| list 100 models → JSON            | 11.4 ms |   9.5 ms | −16.9% |
-| eager list (with relation) → JSON | 22.3 ms |  18.6 ms | −16.4% |
-| load 150, mutate, save            | 30.6 ms |  26.2 ms | −14.4% |
-| nested list (author + comments)   | 14.0 ms |  12.1 ms | −13.3% |
-| show one (with relations)         | 0.92 ms |  0.82 ms | −10.0% |
+| Endpoint (one request, incl. SQL)   | vanilla | + Grease |  Δ   |
+| ----------------------------------- | ------: | -------: | :--: |
+| index: list 100 users → JSON        | 10.9 ms |   2.9 ms | −73% |
+| eager: 100 posts with author → JSON | 20.8 ms |   5.5 ms | −74% |
+| bulk: load 150, mutate, save        | 34.8 ms |  27.7 ms | −21% |
+| show one post (with author)         | 0.38 ms |  0.21 ms | −45% |
 
-Reproduce: `php benchmarks/realworld.php` (see [`benchmarks/`](benchmarks)). The
-gain scales with how much your request hydrates — wide selects, eager loads, and
-serialization-heavy API responses benefit most.
+> **Read these as Grease's share of the Eloquent-bound work, not your p99.** The macro
+> runs on `:memory:` SQLite, where database I/O is ~zero — so the ORM (and Grease's
+> slice of it) is a large fraction of the request. The portable figure is the
+> **absolute time removed** (~8 ms off `index`, ~15 ms off `eager`); against a networked
+> database the same milliseconds are a smaller percentage of a slower request. The gain
+> scales with how much a request hydrates and serializes.
+
+Reproduce: `php benchmarks/realworld.php` (see [`benchmarks/`](benchmarks)).
 
 ## Caveats
 
@@ -118,7 +131,7 @@ order, same return values) and speeds up *every* dispatch in the app, not just m
 events. Opt in by registering the provider (it is **not** auto-discovered):
 
 ```php
-// bootstrap/providers.php (Laravel 11+) or the providers array in config/app.php
+// bootstrap/providers.php, or the providers array in config/app.php
 Grease\Events\GreaseEventServiceProvider::class,
 ```
 
@@ -143,13 +156,14 @@ prove byte-identical**:
 - **`SuiteBench`** — drives the real SQL roundtrip test suite (migrate → query →
   write → eager-load) through a booted app, so any covered path's cost is tracked.
 
-Representative `CastBench` deltas (vanilla → greased): hydrate −61%, set+dirty
-−41%, read-all-casts −36%, `toArray` −53%. The event dispatcher tier is measured
-separately by `DispatcherBench` and `EventStormBench`.
+Representative `CastBench` deltas (vanilla → greased, in-memory, your hardware will
+vary): hydrate −53%, `toArray` −53%, set+dirty −44%, read-all-casts −31%, enum cast
+−58%. The event dispatcher tier is measured separately by `DispatcherBench` and
+`EventStormBench`.
 
 ## Requirements
 
-PHP 8.2+, Laravel 11/12/13.
+PHP 8.2+, Laravel 12/13.
 
 ## License
 

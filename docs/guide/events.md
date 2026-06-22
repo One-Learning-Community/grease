@@ -50,7 +50,7 @@ touches.
 It is **not** auto-discovered — you register it explicitly:
 
 ```php
-// bootstrap/providers.php (Laravel 11+), or the providers array in config/app.php
+// bootstrap/providers.php, or the providers array in config/app.php
 Grease\Events\GreaseEventServiceProvider::class,
 ```
 

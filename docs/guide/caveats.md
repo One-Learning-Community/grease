@@ -7,7 +7,7 @@ trivial idiomatic workaround.
 
 The full cast contract is asserted **byte-identical to vanilla** in the test suite —
 every cast type, every edge value, every null, every dirty comparison — across PHP
-8.2–8.5 and Laravel 11/12/13.
+8.2–8.5 and Laravel 12/13.
 
 ## What stays exactly the same
 

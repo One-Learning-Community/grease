@@ -28,16 +28,16 @@ features:
     details: Asserted across every cast type, edge value, and dirty-check in the parity suite. Same bytes as vanilla Eloquent — or it's a failing test. That promise is the whole product.
   - icon: ⚡
     title: Per-op wins that stack
-    details: "hydrate −61% · toArray −53% · set+dirty −41% · read −36% · enum cast −56% · date serialization −92%. Marginal in isolation; compounded on a real request, they aren't."
+    details: "hydrate −53% · toArray −53% · set+dirty −44% · read −31% · enum cast −58% · date serialization −92%. Marginal in isolation; compounded on a real request, they aren't."
   - icon: 📦
     title: Real requests, end to end
-    details: "−10% to −17% off controller-shaped workloads — SQL included. Not a micro-benchmark: list, eager-load, mutate-and-save, nested serialize."
+    details: "Big end-to-end deltas on in-memory workloads (−21% to −74% across list, eager-load, mutate-save, show) — SQL included, not a micro-benchmark. Read them as Grease's share of the ORM work; the portable figure is the absolute time removed."
   - icon: 🔌
     title: Beyond Eloquent
     details: "A drop-in faster event dispatcher (−53% on no-listener dispatch) speeds up every dispatch app-wide — model events, views, cache, your own events."
   - icon: 🧩
     title: Zero framework changes
-    details: Non-greased models run pure vanilla Eloquent — Grease adds zero cost to anything that doesn't opt in. PHP 8.2+, Laravel 11 / 12 / 13.
+    details: Non-greased models run pure vanilla Eloquent — Grease adds zero cost to anything that doesn't opt in. PHP 8.2+, Laravel 12 / 13.
 ---
 
 <div style="max-width: 960px; margin: 4rem auto 0; padding: 0 24px;">

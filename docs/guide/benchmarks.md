@@ -6,16 +6,15 @@ exactly the behaviour a test certifies. Reproduce any of it from the repo.
 
 ## End to end, per request (incl. SQL)
 
-Real SQLite, real queries, controller-shaped workloads. Vanilla Eloquent vs. the
+In-memory SQLite, real queries, controller-shaped workloads. Vanilla Eloquent vs. the
 same models with `HasGrease`. Output is byte-identical.
 
 | Endpoint (one request, incl. SQL) | vanilla | + Grease | Δ |
 | --- | ---: | ---: | :---: |
-| list 100 models → JSON | 11.4 ms | 9.5 ms | **−16.9%** |
-| eager list (with relation) → JSON | 22.3 ms | 18.6 ms | **−16.4%** |
-| load 150, mutate, save | 30.6 ms | 26.2 ms | **−14.4%** |
-| nested list (author + comments) | 14.0 ms | 12.1 ms | **−13.3%** |
-| show one (with relations) | 0.92 ms | 0.82 ms | **−10.0%** |
+| index: list 100 users → JSON | 10.9 ms | 2.9 ms | **−73%** |
+| eager: 100 posts with author → JSON | 20.8 ms | 5.5 ms | **−74%** |
+| bulk: load 150, mutate, save | 34.8 ms | 27.7 ms | **−21%** |
+| show one post (with author) | 0.38 ms | 0.21 ms | **−45%** |
 
 ```bash
 php benchmarks/realworld.php
@@ -24,7 +23,9 @@ php benchmarks/realworld.php
 The gain scales with how much your request hydrates: wide selects, eager loads, and
 serialization-heavy API responses benefit most. A request that does almost no
 Eloquent work has almost nothing for Grease to speed up — and that's the honest
-shape of it.
+shape of it. These are `:memory:` numbers — read the
+[methodology note below](#how-to-read-these-honestly) before mapping them onto a
+networked database.
 
 ## Per operation (CastBench, A/B)
 
@@ -33,11 +34,11 @@ delta directly. Representative deltas (vanilla → greased):
 
 | Operation | Δ |
 | --- | :---: |
-| hydrate a row | **−61%** |
+| hydrate a row | **−53%** |
 | `toArray()` (serialize) | **−53%** |
-| set + dirty-check | **−41%** |
-| read all casts | **−36%** |
-| read an enum cast | **−56%** |
+| set + dirty-check | **−44%** |
+| read all casts | **−31%** |
+| read an enum cast | **−58%** |
 | date serialization (per date column) | **~−92%** |
 
 ```bash
@@ -81,7 +82,7 @@ percentages as "Grease's share of the Eloquent-bound work," not "your p99 will d
 larger denominator.
 :::
 
-- **Per-op vs per-request.** A −61% on `hydrate` is a per-operation figure; it
+- **Per-op vs per-request.** A −53% on `hydrate` is a per-operation figure; it
   becomes a per-request figure only multiplied by how many rows you hydrate. The
   end-to-end table is the one that includes your SQL.
 - **The win is workload-shaped.** Grease accelerates hydration, casting, and

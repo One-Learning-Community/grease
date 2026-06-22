@@ -59,7 +59,7 @@ dirty-tracking — down to the byte.
 
 That isn't a hope; it's a test suite. Every cast type, every edge value, every
 null, every dirty comparison is asserted equal to vanilla across PHP 8.2–8.5 and
-Laravel 11/12/13. The benchmarks run the *same fixtures the parity tests prove
+Laravel 12/13. The benchmarks run the *same fixtures the parity tests prove
 identical*, so a number you read is a number you can trust.
 
 Where Grease can't guarantee byte-identity for an exotic case, it **defers to

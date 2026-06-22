@@ -3,7 +3,7 @@
 ## Requirements
 
 - **PHP** 8.2+
-- **Laravel** 11, 12, or 13
+- **Laravel** 12 or 13
 
 Grease is a pure userland package. It makes **zero** changes to the framework and
 adds **zero** cost to models that don't opt in.
@@ -75,7 +75,7 @@ per-model tiers. It speeds up *every* dispatch in the app, not just model events
 It's opt-in and **not** auto-discovered:
 
 ```php
-// bootstrap/providers.php (Laravel 11+), or the providers array in config/app.php
+// bootstrap/providers.php, or the providers array in config/app.php
 Grease\Events\GreaseEventServiceProvider::class,
 ```
 
