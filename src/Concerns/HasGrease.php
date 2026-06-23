@@ -14,10 +14,11 @@ namespace Grease\Concerns;
  *
  * Prefer a single tier? Use it directly instead — they compose freely and share
  * one per-class blueprint:
- *   - HasGreasedHydration     (construct / hydration)
- *   - HasGreasedAttributes    (cast/date/mutator metadata memoization)
- *   - HasGreasedCasts         (narrowed flyweight cast dispatch — see its caveat)
- *   - HasGreasedSerialization (date serialization round-trip elimination)
+ *   - HasGreasedHydration       (construct / hydration)
+ *   - HasGreasedAttributes      (cast/date/mutator metadata memoization)
+ *   - HasGreasedClassAttributes (class-attribute resolution: #[Table]/#[Fillable]/…)
+ *   - HasGreasedCasts           (narrowed flyweight cast dispatch — see its caveat)
+ *   - HasGreasedSerialization   (date serialization round-trip elimination)
  *
  * Every tier is a method override that falls back to `parent::`, so output stays
  * byte-identical to vanilla Eloquent. Non-greased models are untouched.
@@ -26,6 +27,7 @@ trait HasGrease
 {
     use HasGreasedHydration;
     use HasGreasedAttributes;
+    use HasGreasedClassAttributes;
     use HasGreasedCasts;
     use HasGreasedSerialization;
 }

@@ -1,6 +1,6 @@
 # How It Works
 
-## One pattern, four tiers
+## One pattern, five tiers
 
 Every Grease tier is the same shape: a **method override that reads a single
 per-class "blueprint" and falls back to `parent::`** for anything it doesn't
@@ -33,17 +33,21 @@ invalidates as a unit. Two things make this fast *and* safe:
 Non-greased models run pure vanilla Eloquent. Grease adds **zero** cost to anything
 that doesn't use it.
 
-## The four model tiers
+## The five model tiers
 
 | Tier | What it computes once instead of every time |
 | --- | --- |
 | **`HasGreasedHydration`** | Kills the per-row `ReflectionClass`, the per-instance casts rebuild, and `newInstance`'s redundant work during hydration. |
 | **`HasGreasedAttributes`** | Memoizes `getCasts` / `getCastType` / `getDates` / mutator probes / `getDateFormat` — the class-pure metadata Eloquent re-derives constantly. |
+| **`HasGreasedClassAttributes`** | Caches `resolveClassAttribute` (the `#[Table]` / `#[Fillable]` / `#[Hidden]` / `#[Appends]` / … lookups the per-instance `initialize*` booters run ~13× per `new` model) by a concat-free `[class][attribute]` key instead of vanilla's freshly-built `"$class@$attr"` string — **−13% on an eager-load `get()`**. |
 | **`HasGreasedCasts`** | Replaces the per-access cast `switch` with a flyweight resolved once per cast type, plus a fast path that delegates enum conversion to the framework. |
 | **`HasGreasedSerialization`** | Eliminates the Carbon parse-and-reformat round-trip for date serialization — when a per-class probe certifies the output is a byte-identical rewrite. |
 
-`HasGrease` is the umbrella that pulls in all four; `GreasedModel` is the same as an
-`extends`-able base class.
+`HasGrease` is the umbrella that pulls in all five; `GreasedModel` is the same as an
+`extends`-able base class. (`HasGreasedClassAttributes` keeps its cache in a carve-out
+static rather than the blueprint — class-level PHP attributes are immutable for a process's
+lifetime, so it never needs invalidation, the same reasoning as the `getDateFormat`
+connection cache.)
 
 ## Two techniques worth understanding
 

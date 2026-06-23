@@ -582,9 +582,34 @@ Roughly highest-leverage first.
     (bigger override surface). Measure-first: A/B (a) before (b) — don't trust the structural
     hunch (str_contains/strtr/predicate-hoist all looked right and lost). Parity bar: byte-
     identical hydrated model (same fillable/hidden/appends/table/casts). Harness: `eager_excimer.php`
-    (kept, the reusable model/eager profiler — analogue of `blade_excimer.php`). **This is the
-    strongest next Eloquent-axis tier — recent feature, hot path, allocation-shaped, core left
-    it unoptimized.**
+    (kept, the reusable model/eager profiler — analogue of `blade_excimer.php`).
+    - ✅ **SHIPPED: `HasGreasedClassAttributes`** (5th model tier, in `HasGrease`). The chain,
+      and why measure-first earned its keep at every step:
+      - Micro-A/B of the cache shape: concat key vs nested `[class][attr]` = **−39%/call**
+        (49.4 → 30.1 ns) — the concat alloc *is* a real cost.
+      - **First cut REGRESSED in situ** and the profile caught it: keyed into the 3-level
+        blueprint (`[$class]['classAttributes'][$attr]`), traversed 3×/call, the extra level
+        out-cost vanilla's concat — `resolveClassAttribute` only fell 37% → 33.7% self. The
+        micro had been *unfaithful* (it modelled a flat 2-level static, not the 3-level
+        blueprint). Lesson re-learned: make the micro match the real shape.
+      - Fix: a flat **2-level carve-out static** `[$class][$attr]`, sub-array fetched once
+        into a local → warm path is one class lookup + one `array_key_exists`, no alloc.
+        Re-profile: 33.7% → 27.9% self (the rest is irreducible per-call frame overhead ×
+        ~25k calls — only the deeper (b) freeze could touch it).
+      - **Honest throughput (tier-isolated A/B, 4 tiers vs full HasGrease, parity OK):
+        −13.3%/−13.5% on a 2,100-row eager `get()`** (~485 µs/get(), matching the micro's
+        per-call × call-count estimate). Self-time % understated it; throughput is the truth.
+      - Byte-identical incl. vanilla's **property-less cache-key collision quirk** (`#[Table]`
+        resolved with vs without a property returns whichever was cached first) — reproduced
+        and pinned by `HasGreasedClassAttributesParityTest` (battery / absent-null / parent-chain
+        / the quirk both orderings / integration getters / carve-out memo). `realworld` held at
+        −77.8% / −47% / −19.9% (zero regression). 291 tests / 735 assertions.
+    - **Remaining deeper lever (option b, not built):** `resolveClassAttribute` is still ~28%
+      self — the bulk is now call *frequency* (~13 calls/instance), not the cache. Freezing the
+      `initialize*`-derived per-instance state once per class (snapshot `fillable`/`hidden`/
+      `visible`/`appends`/`table`/`touches`/… after the first instance, apply by direct copy,
+      skip the booters' calls) would capture more — but it's a much bigger, higher-risk override
+      surface (many properties, exact init-order parity). A focused future tier, its own session.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
