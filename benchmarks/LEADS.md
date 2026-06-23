@@ -92,6 +92,26 @@ attributes are immutable for the process — textbook Grease shape, the containe
   **(b)** then the byte-identical A/B with full contextual/`$with`/attribute fidelity;
   **(c)** confirm on Linux/docker.
 
+> **✅ BUILT & MEASURED (2026-06-23).** Tier shipped: `src/Container/{ResolvesWithGrease
+> Blueprint,Container,Application}`. Parity green — `BlueprintParityTest` (12 build-path
+> shapes, oracle = vanilla) + `BootParity` (fully-configured Testbench app, vanilla vs
+> greased, byte-identical served response, blueprint exercised during real boot). Opt-in
+> confirmed: `configure()` uses `new static`, so it's a one-line `bootstrap/app.php` swap;
+> full Laravel boots + serves 200 through it.
+>
+> **Measured (macOS, needs Linux confirm):**
+> - **−31% per transient resolve** (`container_build_ab.php`, 4-dep `Ctrl`) — confirms the
+>   hypothesis.
+> - **Request-level (`container_realworld.php`, real Testbench skeleton):** boot ~0%
+>   (+1.4%, noise — boot is IO/provider-bound, the ~20 transient builds save ~0.15 ms of
+>   21 ms); **dispatch −5.2%** (2-dep controller) to **−6.6%** (~25-build DI-heavy action).
+>
+> **Verdict:** byte-identical, real, but a **modest compounding tier (−5 to −7% dispatch,
+> ~0% boot)** — NOT the −31% the micro-bench implied, because resolution is a thin slice of
+> a request. Scales with DI volume; the whole per-request story under **Octane** (boot
+> amortized). On par with shipped Eloquent micro-tiers; earns its place in the bundle, not
+> a standalone headline. Exactly the "singleton-heavy apps see less" caveat above, sized.
+
 ### 🟢 HEADLINE 2 — Request `input()`/`all()` per-instance memoization
 *Axis: HTTP · Confidence: high (waste) / medium (magnitude)*
 
