@@ -6,6 +6,35 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **A greased config repository — memoized `config()` reads.** `config('a.b.c')` is a
+  per-request multiplier (a vanilla Laravel 13 request makes ~50 reads before your code runs;
+  a real app makes hundreds-to-thousands), and vanilla re-walks the nested array on every call.
+  `Grease\Config\Repository` memoizes the resolved value per key (`array_key_exists`, not `??=`,
+  so a stored `null` stays cached; a sentinel distinguishes a stored `null` from an absent key
+  in one walk; absent keys are never memoized). Measured **−65%** on a repeat-heavy read mix.
+  Writes flush the memo; the one carve-out is out-of-band `$items` mutation (`flushConfigMemo()`
+  is the hook). Octane-safe — Octane sandboxes config per request via `clone`, and the greased
+  repo is byte-identical through that clone. Opt in with the (non-auto-discovered)
+  `Grease\Config\GreaseConfigServiceProvider`. Measured on top of `config:cache`, which optimizes
+  boot, not the read path. Parity: `ConfigRepositoryParityTest` + `GreaseConfigServiceProviderTest`.
+
+- **`grease:config-cache` — an eager, opcache-interned flat config index.** A drop-in twin of
+  `config:cache` that also emits a flat `'a.b.c' => value` leaf map as a constant `return [...]`
+  file, which opcache interns into shared memory — so every leaf read is a hash hit with no
+  dot-walk and **no warmup**, from the first call, on every request. A stable **~88% cut of
+  config-read time vs vanilla** regardless of call volume; the absolute saving scales with it.
+  This is the tier that wins the per-request-cold case the memo can't reach (every FPM request,
+  every fresh Octane clone, where the memo resets), and it costs ~0 per-request memory (one copy
+  in opcache SHM). The provider loads the index only when it's fresh relative to the config cache,
+  so a later plain `config:cache` / `config:clear` transparently disables a stale index.
+
+- **A persistent-worker (Octane) benchmark** (`benchmarks/octane.php`) — a cold-start-vs-warm
+  harness over the cumulative-stack fixtures, surfacing the warmup tax a persistent worker
+  amortizes. It also retired the container-blueprint precompile idea (measured ~0µs warmup tax —
+  a credible negative) on the way to the config flat-index, which is where that lever actually pays.
+
 ## [0.4.1] - 2026-06-23
 
 A correctness fix to the Blade view tier, and an honest re-measurement of its benchmarks.

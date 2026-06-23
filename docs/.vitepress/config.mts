@@ -63,6 +63,7 @@ export default defineConfig({
             { text: 'Blade Components', link: '/guide/blade' },
             { text: 'The Container', link: '/guide/container' },
             { text: 'The Request', link: '/guide/request' },
+            { text: 'The Config Repository', link: '/guide/config' },
           ],
         },
         {

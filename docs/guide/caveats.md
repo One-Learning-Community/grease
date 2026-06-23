@@ -67,11 +67,11 @@ byte-identity, it hands the work back to the framework:
 
 All of the above produce identical output; they simply don't get the fast path.
 
-## The foundation tiers (container & request)
+## The foundation tiers (container, request & config)
 
-These two are a *different axis* from the model traits, with their own opt-in (an
-application-file edit, not a trait) — see [The Container](/guide/container) and
-[The Request](/guide/request). Their narrowing is minimal:
+These are a *different axis* from the model traits, with their own opt-in — see
+[The Container](/guide/container), [The Request](/guide/request), and
+[The Config Repository](/guide/config). Their narrowing is minimal:
 
 - **Container** — none beyond the opt-in itself. The blueprint caches reflection, not
   resolution, so contextual bindings, `$with` overrides, and late rebinds all stay live;
@@ -83,8 +83,14 @@ application-file edit, not a trait) — see [The Container](/guide/container) an
   (`clone`/`duplicate`, `initialize`, `setMethod`) too. Mutating bags *outside* the input
   surface is fully safe — including `$request->attributes->set(...)`, the common middleware
   pattern, and `cookies`.
+- **Config** — exactly one carve-out: **out-of-band mutation of `$items`**, a macro or
+  reflection writing the protected array directly instead of going through `set()` (which the
+  caches track, along with `prepend`/`push`/`offsetSet`/`offsetUnset`). Vanishingly rare;
+  `flushConfigMemo()` is the explicit hook if you ever do it. The `grease:config-cache` flat
+  index additionally only engages while it's fresh relative to the config cache — a later plain
+  `config:cache` or `config:clear` disables it automatically, so a stale index is never served.
 
-Both are opt-in independently of everything else. Not confident? Don't take them — the
+All three are opt-in independently of everything else. Not confident? Don't take them — the
 model, event, and Blade tiers all work without them.
 
 ## Want zero cast caveats at all?

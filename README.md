@@ -40,6 +40,7 @@ provider:
 // bootstrap/providers.php, or the providers array in config/app.php
 Grease\Events\GreaseEventServiceProvider::class,   // faster event dispatcher, app-wide
 Grease\View\GreaseViewServiceProvider::class,      // faster Blade component render
+Grease\Config\GreaseConfigServiceProvider::class,  // memoized config() reads (+ grease:config-cache)
 ```
 
 Two further **foundation** tiers go deeper into the request lifecycle. They can't be a
@@ -67,6 +68,7 @@ Representative deltas, measured on Linux ([reproduce on your own build](https://
 - **Per operation:** hydrate −34%, `toArray` −47%, set+dirty −39%, read −27%, enum −48%, date serialization −87%.
 - **Event dispatcher** (app-wide): −53% no-listener dispatch, ~halves a render-dense request's event overhead.
 - **Blade** (render path, app-wide): −28.3% simple / −23.4% rich component renders, −26.8% a `$loop`-heavy table, −20.3% a layout — byte-identical HTML.
+- **Config** (`config()` reads, app-wide): a memoized read path (`−65%` on a repeat-heavy mix), and an opcache-interned flat index via `grease:config-cache` that cuts `~88%` of config-read time — a per-request win that scales with how many reads your app makes (real apps make thousands).
 - **Foundation tiers** (container & request, app-entry opt-in): −38.8% per container resolve, −41% per input-heavy request. Layered with everything above, a real mixed page-load (JSON + Blade) request suite stacks to **~−47% end-to-end** for **~+2% retained memory** — see the [cumulative-stack table](https://one-learning-community.github.io/grease/guide/benchmarks#the-whole-stack-compounding).
 
 These are `:memory:`/Linux figures — read them as Grease's share of the work, not your p99,
@@ -92,7 +94,7 @@ composer bench    # phpbench per-op A/B + the SQL suite
 - **[How It Works](https://one-learning-community.github.io/grease/guide/how-it-works)** — the per-class blueprint and each tier
 - **[Benchmarks](https://one-learning-community.github.io/grease/guide/benchmarks)** — full numbers, methodology, and reproducing them on your build
 - **[The Method](https://one-learning-community.github.io/grease/guide/method)** — how a win is found and proven (and how the dead ends got rejected)
-- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** — the beyond-Eloquent tiers
+- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** — the beyond-Eloquent tiers
 - **[Caveats & Narrowing](https://one-learning-community.github.io/grease/guide/caveats)** — the two small, obscure things that change
 
 ## Requirements
