@@ -32,6 +32,21 @@ use Illuminate\Support\Arr;
  * `$request->json()->set(...)` — bypasses every method and is not cheaply observable, so
  * it's unsupported after the first input read on a greased request. Use the Laravel-level
  * mutators instead, which the memo tracks.
+ *
+ * Why this can't be locked down (it was considered): the obvious guard — making the
+ * `query`/`request` bag properties private here — is impossible *and* would miss the mark.
+ *   1. PHP forbids narrowing an inherited property's visibility ("Access level to
+ *      Child::$query must be public (as in class Base)"); these are PHP 8.4 hooked
+ *      properties, so even asymmetric `public private(set)` is rejected. And they're read
+ *      publicly by Symfony itself (`getInputSource()` reads `$this->query`) and across the
+ *      ecosystem (`$request->query->get(...)`), so hiding them would break the framework.
+ *   2. Even if it were possible, visibility wouldn't help: the cache-averting call is a
+ *      *method on the bag object* (`->query->set()`), reached by *reading* the property.
+ *      Visibility governs reading/reassignment, not method calls on the held object.
+ * The only true interception — a notify-on-mutate `InputBag` subclass — can't be
+ * guaranteed (`duplicate()` hardcodes `new InputBag(...)` via reflection), so it would be
+ * leaky. An honest, narrow carve-out is the correct boundary; real apps mutate input via
+ * `merge()`/`$request['k'] = …`, not the raw Symfony bags.
  */
 trait MemoizesRequestInput
 {
