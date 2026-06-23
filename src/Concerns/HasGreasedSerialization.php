@@ -56,6 +56,32 @@ trait HasGreasedSerialization
         '2020-06-15 13:45:30',
     ];
 
+    /**
+     * Skip the circular-recursion guard on a relation-less `toArray()`.
+     *
+     * Vanilla wraps `toArray()` in `withoutRecursion()`, which runs a
+     * `debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 2)` + an `Onceable` trace hash +
+     * `WeakMap` churn on *every* call — the guard that stops a circular relation
+     * (`A->load(B)->load(A)`) from recursing forever in `relationsToArray()`. With **no
+     * relations loaded** there is nothing to recurse into: `relationsToArray()` is `[]`, so
+     * `toArray()` is exactly `attributesToArray()`, and the whole guard is dead weight. On a
+     * relation-less collection (`User::limit(100)->get()->toArray()` — no `with()`) that
+     * backtrace is ~13% of the serialize profile.
+     *
+     * Byte-identical: `$this->relations === []` ⇒ `array_merge($this->attributesToArray(), [])`
+     * ⇒ `attributesToArray()` (attribute keys are strings, so no `array_merge` reindexing). Any
+     * loaded relation defers to `parent::toArray()` — the guard stays intact exactly where a
+     * cycle is possible.
+     */
+    public function toArray()
+    {
+        if ($this->relations === []) {
+            return $this->attributesToArray();
+        }
+
+        return parent::toArray();
+    }
+
     protected function addDateAttributesToArray(array $attributes)
     {
         $plan = $this->greaseDateSerializePlan();

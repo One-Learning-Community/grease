@@ -720,6 +720,34 @@ Roughly highest-leverage first.
       `HasGreasedCastProbesParityTest` (oracle = vanilla probes across every cast kind / cached-false-is-a-
       real-hit / runtime divergence reflected / full toArray byte-identical via json_encode). 308 tests /
       845 assertions.
+    - ✅ **SHIPPED: relation-less `toArray()` recursion-guard short-circuit** (in `HasGreasedSerialization`)
+      — lever (4) above, and the biggest macro mover of the whole arc. Vanilla wraps *every* `toArray()`
+      in `withoutRecursion()`, which runs a `debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 2)` + an
+      `Onceable` trace-hash + `WeakMap` churn — a guard whose only job is to stop a *circular relation*
+      from recursing forever in `relationsToArray()`. With `$this->relations === []` there is nothing to
+      recurse into: `relationsToArray()` is `[]`, so `toArray()` is exactly `attributesToArray()` and the
+      entire guard (a per-call `debug_backtrace` — ~13% self of the serialize profile) is dead weight.
+      Override: `if ($this->relations === []) return $this->attributesToArray();` else `parent::toArray()`.
+      - **Byte-identical, incl. the scary case.** Traced the guard semantics: when relations is `[]` the
+        only cycle the guard actually *terminates* — a circular relation, where the nested re-entry hits
+        `relationsToArray()` with the default (attributes-only) and stops — cannot arise. A pathological
+        self-referential *accessor* (an append calling `$this->toArray()`) infinite-loops in vanilla too
+        (the guard's default re-triggers it), so there's no input where vanilla terminates and the
+        short-circuit doesn't — the outputs match exactly. Any loaded relation defers to `parent::`, so
+        the guard stays fully intact where a real cycle is possible.
+      - **Measured:** the `withoutRecursion`/`hashFromTrace`/`getRecursiveCallStack`/`clearRecursiveCallValue`/
+        `getRecursionCache` frames all drop out of the profile (profiler loop 7,012× → 9,209×). Tier-isolated
+        A/B (`benchmarks/toarray_recursion_ab.php`, vanilla-toArray vs short-circuit, parity-gated, mean of
+        3): **−27.2%** on a relation-less rich-cast `get()->toArray()`. Macro: **index_users −81.2% → −86.3%,
+        posts_with_author −80.9% → −83.7%** (nested relation-less models short-circuit even under `with()`),
+        show_post −53.6% → −55.7%, bulk_update held (~−19.6%, no toArray on its hot path). Pinned by
+        `HasGreasedToArrayRecursionParityTest` (relation-less / appends / loaded-relation deferral /
+        self-circular + mutually-circular guard still terminates). 313 tests / 853 assertions.
+      - **The irony worth recording:** core's circular-recursion guard pays a full `debug_backtrace` on
+        every `toArray()` to memoize "am I already running on this object?" — the most expensive way
+        imaginable to answer a question that's `false` for ~100% of real calls (no model is mid-serialize
+        when you serialize it). Exactly Grease's thesis: a dev-ergonomics-first guard, never tuned for the
+        hot path where it never fires.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
