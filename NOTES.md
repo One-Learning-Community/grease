@@ -435,15 +435,42 @@ Roughly highest-leverage first.
       Profile confirms the swap: vanilla `merge` (8% incl) + its `getArrayableItems`/partition
       tail **gone**, greased `merge` now ~3.3% incl. **App page −15.5% → −21.0%** (p50, Linux).
       Test: `test_class_component_opening_seeds_a_greased_attribute_bag`.
+    - **✅ `@foreach` `$loop` bookkeeping greased — the biggest lever of the phase**
+      (`Grease\View\Factory`, bound as the `view` singleton). Found by aiming Excimer at a
+      `@foreach`-heavy page (`page-table`) instead of the component pages: the `$loop`
+      machinery (`ManagesLoops`) is **~35% of a loop-heavy render** — `incrementLoopIndices`
+      alone 25.6% self, because it `array_merge`s the 10-key loop-state array *every
+      iteration*; `getLastLoop`/`addLoop` reach the stack top via `Arr::last` (closure-default
+      overhead). The Grease factory overrides the three: `incrementLoopIndices` updates the
+      state **in place by reference** (no merge), `getLastLoop`/`addLoop` use a direct index.
+      Byte-identical — same loop-state shape, and crucially `getLastLoop` keeps the *fresh
+      `(object)` cast every call* so a template stashing `$loop` across iterations still sees
+      distinct snapshots (the micro proved reusing one object is both unsafe AND ~10% slower
+      than the fresh cast — so there's no tension). Bound via `Factory::fromBase()`
+      (reflection-clone of all state + **re-`share('__env', $new)`** so compiled views'
+      `$__env->…` reach the greased methods). Did NOT fuse the two per-iteration calls via a
+      `compileForeach` emit override — that would couple the compiled-view *cache* to the
+      greased factory being present (poisons across config flips); the vanilla emit calls
+      methods that exist on both factories, so a greased-compiled view still renders on a
+      vanilla factory. Profile after: `incrementLoopIndices` 25.6%→6.1%, `Arr::last` gone,
+      **+44% render throughput**; `getLastLoop` (the `(object)` cast) is now the byte-safe
+      floor at ~21%. **Data-table macro −27.8%** (p50, Linux). Micro: `benchmarks/
+      loop_microbench.php` (−40% of the machinery). Tests: `FactoryLoopParityTest` (countable
+      / single / non-countable generator / nested-with-parent + `fromBase` `__env` re-point).
+      **Owning the `view` Factory is now the foothold for further `ManagesLoops`/`Manages*`
+      wins.** Standing Linux numbers: **simple −38.9% / rich −29.9% / app page −21.4% /
+      data table −27.8%**.
     - **Map of the rest (page-app tail, all measured, all blocked):** `Component::resolve`/
       `data`/`extractPublic*` are statics/methods on the *user's* component class — not
       reachable without a Grease base class (breaks the drop-in opt-in). `componentData` /
       `AnonymousComponent::data` are genuine `array_merge` assembly with no byte-identical
       shortcut. `normalizeName`/`getEngineFromPath`/`ignoredParameterNames`/
-      `extractConstructorParameters` are already framework-memoized. **Net: the clean,
-      low-risk reachable surface is essentially exhausted at `getCompiledPath`. Everything
-      bigger lives behind the `@component`/`ComponentTagCompiler` emit — a focused, higher-risk
-      session of its own.**
+      `extractConstructorParameters` are already framework-memoized. **Net for the component
+      path:** the clean reachable surface is largely exhausted; the remaining big slice (the
+      per-component compiled boilerplate) lives behind the `@component`/`ComponentTagCompiler`
+      emit — a focused, higher-risk session. **But owning the Factory reopened the field:**
+      the other `Manages*` traits (Stacks/Layouts/Sections/Translations) are now reachable for
+      the same in-place-vs-rebuild treatment — next place to point Excimer.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
