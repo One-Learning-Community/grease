@@ -95,6 +95,7 @@ $variants = [
     'rich avatar (5 props, @php, conditionals, slots)' => 'page-rich',
     'app page (class components, slots, @include/@each, composer)' => 'page-app',
     'data table (nested @foreach, heavy $loop use)' => 'page-table',
+    'layout inheritance (@extends/@section/@yield/@push)' => 'page-layout',
 ];
 
 echo "Taylor's challenge: render $count anonymous components, vanilla vs greased Blade.\n";

@@ -460,6 +460,24 @@ Roughly highest-leverage first.
       **Owning the `view` Factory is now the foothold for further `ManagesLoops`/`Manages*`
       wins.** Standing Linux numbers: **simple −38.9% / rich −29.9% / app page −21.4% /
       data table −27.8%**.
+    - **✅ `@yield`/`yieldContent` — three full-content `str_replace` → one
+      `preg_replace_callback`** (`Grease\View\Factory`, the Factory foothold paying off).
+      `@yield('content')` hands the *whole page body* to `yieldContent`, which vanilla scans
+      THREE times (`@@parent`→marker, strip placeholder, marker→`@parent`) — **29% of a
+      layout render's self-time** (`page-layout` fixture: `@extends`/`@section`/`@yield`/
+      `@push`). The net is one substitution over three *non-overlapping* markers, and neither
+      sequential nor single-pass re-scans its output (`@parent` matches none of the markers),
+      so one `preg_replace_callback` over the alternation is byte-identical — proven against
+      a verbatim three-pass oracle across plain/marker/adjacency/pathological inputs
+      (`FactorySectionParityTest`, 14 cases). **Measurement lesson:** a `str_contains`
+      short-circuit was a DEAD END (−0.6% micro) — `str_replace`-with-no-match doesn't
+      allocate, so the cost is the *scan*, not the copy, and 3 `str_contains` still scan 3×.
+      `strtr` (one pass, multi-key) is +47% — a trap (it checks every position against every
+      key). Only `preg_replace_callback` wins, because PCRE's literal-alternation scan rips
+      through the no-match common case: **−87% on the micro**, `yieldContent` 29%→11% self,
+      **+21% layout throughput**, **page-layout macro −19.4%** (p50, Linux). The remaining
+      11% is the one unavoidable scan — the byte-safe floor (going lower needs tracking
+      marker-presence during section assembly: fragile, not worth it).
     - **Map of the rest (page-app tail, all measured, all blocked):** `Component::resolve`/
       `data`/`extractPublic*` are statics/methods on the *user's* component class — not
       reachable without a Grease base class (breaks the drop-in opt-in). `componentData` /
@@ -469,8 +487,9 @@ Roughly highest-leverage first.
       path:** the clean reachable surface is largely exhausted; the remaining big slice (the
       per-component compiled boilerplate) lives behind the `@component`/`ComponentTagCompiler`
       emit — a focused, higher-risk session. **But owning the Factory reopened the field:**
-      the other `Manages*` traits (Stacks/Layouts/Sections/Translations) are now reachable for
-      the same in-place-vs-rebuild treatment — next place to point Excimer.
+      the other `Manages*` traits (Stacks/Translations) are still reachable for the same
+      treatment — build the fixture that exercises them and point Excimer at it (the lesson
+      that keeps paying: `page-table` surfaced `@foreach`, `page-layout` surfaced `@yield`).
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
