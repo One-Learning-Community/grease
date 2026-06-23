@@ -11,3 +11,6 @@
 # Local AI agent context — kept out of the repo on purpose.
 /CLAUDE.md
 /CLAUDE.local.md
+
+# Scratch profiler output (speedscope dumps, top-frame tables)
+/benchmarks/_profiles/

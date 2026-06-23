@@ -33,6 +33,18 @@ class Compiler extends BladeCompiler
     protected int $greasePropsSite = 0;
 
     /**
+     * Memoized compiled-file paths, keyed by source view path.
+     *
+     * Vanilla recomputes `cachePath.'/'.hash('xxh128', 'v2'.path).'.php'` on every
+     * render — `CompilerEngine::get()` calls it once per view, and a page is a tree
+     * of view renders (every component, slot, @include and @each iteration is one).
+     * The result is a pure function of the path (cachePath/basePath/extension are
+     * fixed for the compiler's life), so the hash is paid once per path, not per
+     * render. Byte-identical output; just memoized.
+     */
+    protected array $greaseCompiledPaths = [];
+
+    /**
      * Build a greased compiler that takes over from an existing one, copying its full
      * state (registered directives, components, conditions, paths, …) so it's a
      * transparent drop-in. Reflection-clones every base property rather than naming
@@ -62,6 +74,15 @@ class Compiler extends BladeCompiler
      * into scope. The loop (not `extract`, which is slower and skips non-identifier keys)
      * reproduces vanilla's locals exactly, including the inaccessible kebab-alias local.
      */
+    /**
+     * Memoized per source path — see {@see $greaseCompiledPaths}. The base computes a
+     * hash of the path on every call; this pays it once. Identical return value.
+     */
+    public function getCompiledPath($path)
+    {
+        return $this->greaseCompiledPaths[$path] ??= parent::getCompiledPath($path);
+    }
+
     protected function compileProps($expression)
     {
         $site = md5(($this->getPath() ?: 'inline').':'.$this->greasePropsSite++);

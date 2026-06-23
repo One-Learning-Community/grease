@@ -35,8 +35,11 @@ $count = (int) ($argv[1] ?? 1000);
 $rounds = (int) ($argv[2] ?? 30);
 $warmup = 5;
 
+// Registers the page-app class components + view composer onto an app.
+$register = require __DIR__.'/blade/register.php';
+
 /** Boot an isolated app for one arm, with its own compiled-view cache. */
-$boot = function (bool $greased) use ($VIEWS): \Illuminate\Foundation\Application {
+$boot = function (bool $greased) use ($VIEWS, $register): \Illuminate\Foundation\Application {
     // Clear the framework's process-global component statics so two apps don't bleed.
     Component::flushCache();
     Component::forgetComponentsResolver();
@@ -58,6 +61,7 @@ $boot = function (bool $greased) use ($VIEWS): \Illuminate\Foundation\Applicatio
 
     $app['config']->set('view.compiled', $cache);
     $app['view']->addLocation($VIEWS);
+    $register($app);
 
     return $app;
 };
@@ -89,6 +93,7 @@ function percentile(array $xs, float $p): float
 $variants = [
     'simple avatar (initials + one merge)' => 'page-simple',
     'rich avatar (5 props, @php, conditionals, slots)' => 'page-rich',
+    'app page (class components, slots, @include/@each, composer)' => 'page-app',
 ];
 
 echo "Taylor's challenge: render $count anonymous components, vanilla vs greased Blade.\n";

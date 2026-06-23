@@ -1,0 +1,1 @@
+<span {{ $attributes->merge(['class' => 'stat inline-flex gap-1']) }}><span class="stat-label text-gray-500">{{ $label }}</span><span class="stat-value font-semibold">{{ number_format($value) }}</span></span>

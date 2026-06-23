@@ -56,6 +56,9 @@ $app = Application::create(
 $app['config']->set('view.compiled', $cache);
 $app['view']->addLocation($VIEWS);
 
+// Register page-app's class components + view composer (harmless for simple/rich).
+(require __DIR__.'/blade/register.php')($app);
+
 Container::setInstance($app);
 Facade::setFacadeApplication($app);
 

@@ -386,6 +386,53 @@ Roughly highest-leverage first.
       state bleed between components. This is the next thing to point Excimer at — measure
       first, parity-gate via the macro. **The compiled-view body (~70%) is mostly genuine
       work + user template content, not framework overhead we can grease.**
+    - **✅ Phase 4 — broadened the inspection past the single-avatar micro.** Built a
+      page-shaped fixture (`benchmarks/blade/views/page-app.blade.php` + `components.php`/
+      `register.php`): a `<x-layout>` with named/slotted slots, `<x-card>`/`<x-stat>` class
+      components, a nested `<x-avatar>`, `@include`, `@each`, and a `partials.nav` view
+      composer. Added it as the third macro variant and profiled it on Linux (Excimer,
+      `benchmarks/dump_compiled.php` prints the emitted boilerplate). On the realistic page
+      the shipped @props+merge win **dilutes to ~−13%** (vanilla 47 ms) — the greasable
+      fraction shrinks as genuine template work + per-component framework machinery grows.
+    - **✅ `getCompiledPath` memoization shipped** (`Grease\View\Compiler`). It's a pure
+      `hash('xxh128', 'v2'.path)` recomputed on EVERY view render (`CompilerEngine::get`),
+      and a page is a tree of renders (every component/slot/`@include`/`@each` is one). The
+      framework already memoizes its siblings (`Factory::normalizeName`→`normalizedNameCache`,
+      `getEngineFromPath`→`pathEngineCache`) but **missed this one** — a clean oversight. Memo
+      keyed by path; byte-identical. **App page −13.3%→−15.3% (+2pp)**, neutral on the micros
+      (few distinct paths there). It scales *with* render count, so it helps realistic pages
+      more — the opposite of the @props/merge dilution. Test: `test_compiled_path_matches_
+      vanilla_and_is_memoized`.
+    - **❌ `View::gatherData` Renderable scan: measured dead end** (`_gatherdata_ab.php`
+      A/B, since removed). The `foreach … instanceof Renderable` is 46% of gatherData, and
+      in the common case it's pure tax (only `View`/`Mailable` implement `Renderable`; slots
+      are `Htmlable`, `errors` is `Stringable`). But it's *unskippable*: 54% is the
+      unavoidable `array_merge`, and the scan cost is dominated by the per-render `$this->data`
+      (un-memoizable), not the stable `getShared()` (3 keys). Memoizing "shared has no
+      Renderable" recovers only −2.7% of gatherData ≈ 0.1% of a render — not worth a
+      `Factory`+`View` subclass. Two tempting refactors are also parity-blocked: building the
+      union from `$this->data` first flips key order (the `@props` path reads
+      `get_defined_vars()` — order is load-bearing), and lazy/skip-rendering unused
+      Renderables changes side effects (`@push`/`@section`) that affect *other* views' output.
+    - **❌ Class-component `$attributes->merge()` (vanilla, ~8% incl on page-app): blocked by
+      emit ordering.** Class components build their bag via `Component::newAttributeBag()` →
+      a *vanilla* `ComponentAttributeBag`, so their template merge takes the slow Collection
+      path (Grease's greased bag only reaches anonymous components, via `Props::mergeAttributes`).
+      Can't upgrade the bag from the `ComponentTagCompiler` emit: the boilerplate calls
+      `$component->data()` (which extracts `$this->attributes` into template scope) *inside*
+      `startComponent`, BEFORE `withAttributes` populates it — so the template captures the
+      vanilla bag reference, and you can't change an object's class in place. Reaching it
+      needs an `@component`-emit rewrite (version-fragile, the high-risk path). Partly a
+      fixture artifact anyway — real apps lean on anonymous components, already greased.
+    - **Map of the rest (page-app tail, all measured, all blocked):** `Component::resolve`/
+      `data`/`extractPublic*` are statics/methods on the *user's* component class — not
+      reachable without a Grease base class (breaks the drop-in opt-in). `componentData` /
+      `AnonymousComponent::data` are genuine `array_merge` assembly with no byte-identical
+      shortcut. `normalizeName`/`getEngineFromPath`/`ignoredParameterNames`/
+      `extractConstructorParameters` are already framework-memoized. **Net: the clean,
+      low-risk reachable surface is essentially exhausted at `getCompiledPath`. Everything
+      bigger lives behind the `@component`/`ComponentTagCompiler` emit — a focused, higher-risk
+      session of its own.**
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green

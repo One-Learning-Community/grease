@@ -80,6 +80,25 @@ class ViewPropsParityTest extends TestCase
         $this->assertStringContainsString('Grease\\View\\Props::mergeAttributes(', $greased->compileString("@props(['x' => 1])"));
     }
 
+    public function test_compiled_path_matches_vanilla_and_is_memoized(): void
+    {
+        $cache = sys_get_temp_dir();
+        $vanilla = new BladeCompiler(new Filesystem, $cache);
+        $greased = new Compiler(new Filesystem, $cache);
+
+        // The memoized override must return the byte-for-byte same compiled path the
+        // base computes — for several distinct paths — and be stable across calls.
+        foreach (['components.avatar', 'page-app', 'partials.nav', 'x'] as $path) {
+            $this->assertSame(
+                $vanilla->getCompiledPath($path),
+                $greased->getCompiledPath($path),
+                "compiled path diverged for {$path}",
+            );
+            // Second call hits the memo; identical to the first and to vanilla.
+            $this->assertSame($vanilla->getCompiledPath($path), $greased->getCompiledPath($path));
+        }
+    }
+
     /**
      * Execute compiled `@props` PHP against an attribute bag and capture what a
      * component body would see: the resolved prop locals and the surviving attributes.
