@@ -58,6 +58,7 @@ export default defineConfig({
             { text: 'How It Works', link: '/guide/how-it-works' },
             { text: 'Serialization Helpers', link: '/guide/serialization-helpers' },
             { text: 'Benchmarks', link: '/guide/benchmarks' },
+            { text: 'The Method', link: '/guide/method' },
             { text: 'The Event Dispatcher', link: '/guide/events' },
             { text: 'Blade Components', link: '/guide/blade' },
           ],

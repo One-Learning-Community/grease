@@ -144,7 +144,9 @@ larger denominator.
   logic. Profile first — if Eloquent isn't your hot path, this isn't your package.
 - **Marginal numbers stay marginal numbers.** Where a tier benchmarked inside the
   noise, it was parked, not shipped, and that's recorded openly in the repo's notes.
-  The figures here are the ones that cleared the bar.
+  The figures here are the ones that cleared the bar. How a candidate gets from "looks
+  faster" to "shipped" (or "measured dead end") is written up in
+  [The Method](/guide/method).
 
 ## A benchmark is a property of the build
 
