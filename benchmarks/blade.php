@@ -30,9 +30,27 @@ use Illuminate\Support\Facades\Facade;
 use Illuminate\View\Component;
 use Orchestra\Testbench\Foundation\Application;
 
+// `--json[=path]` → machine-readable payload for the docs (same measurement, no table).
+$args = array_slice($argv, 1);
+$jsonOut = null;
+$emitJson = false;
+foreach ($args as $i => $a) {
+    if ($a === '--json' || str_starts_with($a, '--json=')) {
+        $emitJson = true;
+        $jsonOut = str_contains($a, '=') ? substr($a, 7) : null;
+        unset($args[$i]);
+    }
+}
+$args = array_values($args);
+$say = function (string $line) use ($emitJson): void {
+    if (! $emitJson) {
+        echo $line;
+    }
+};
+
 $VIEWS = __DIR__.'/blade/views';
-$count = (int) ($argv[1] ?? 1000);
-$rounds = (int) ($argv[2] ?? 30);
+$count = (int) ($args[0] ?? 1000);
+$rounds = (int) ($args[1] ?? 30);
 $warmup = 5;
 
 // Registers the page-app class components + view composer onto an app.
@@ -102,9 +120,10 @@ $variants = [
     'full page (extends layout, 5 sections, 100-row @foreach table, components)' => 'page-full',
 ];
 
-echo "Taylor's challenge: render $count anonymous components, vanilla vs greased Blade.\n";
-echo str_repeat('-', 72)."\n";
+$say("Taylor's challenge: render $count anonymous components, vanilla vs greased Blade.\n");
+$say(str_repeat('-', 72)."\n");
 
+$variantsOut = [];
 foreach ($variants as $label => $page) {
     $plain = $boot(false);
     $grease = $boot(true);
@@ -136,11 +155,53 @@ foreach ($variants as $label => $page) {
         }
     }
 
-    echo "$label  (parity ✔)\n";
+    $percentiles = [];
     foreach ([50, 90] as $pct) {
         $p = percentile($t['plain'], $pct) / 1e6;   // ns → ms
         $g = percentile($t['grease'], $pct) / 1e6;
-        printf("  p%-2d  vanilla %7.2f ms   grease %7.2f ms   Δ %+6.1f%%\n", $pct, $p, $g, ($g - $p) / $p * 100);
+        $percentiles[$pct] = [
+            'vanilla_ms' => round($p, 2),
+            'grease_ms' => round($g, 2),
+            'delta_pct' => round(($g - $p) / $p * 100, 1),
+        ];
     }
-    echo "\n";
+
+    $variantsOut[] = [
+        'key' => $page,
+        'label' => $label,
+        'vanilla_ms' => $percentiles[50]['vanilla_ms'],
+        'grease_ms' => $percentiles[50]['grease_ms'],
+        'delta_pct' => $percentiles[50]['delta_pct'],
+        'percentiles' => $percentiles,
+    ];
+
+    $say("$label  (parity ✔)\n");
+    foreach ($percentiles as $pct => $row) {
+        $say(sprintf(
+            "  p%-2d  vanilla %7.2f ms   grease %7.2f ms   Δ %+6.1f%%\n",
+            $pct, $row['vanilla_ms'], $row['grease_ms'], $row['delta_pct'],
+        ));
+    }
+    $say("\n");
+}
+
+if ($emitJson) {
+    $payload = [
+        'count' => $count,
+        'rounds' => $rounds,
+        'parity' => 'pass',
+        'source' => 'benchmarks/blade.php',
+        'blade' => $variantsOut,
+    ];
+    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n";
+
+    if ($jsonOut !== null) {
+        if (! is_dir($dir = dirname($jsonOut))) {
+            mkdir($dir, 0755, true);
+        }
+        file_put_contents($jsonOut, $json);
+        fwrite(STDERR, "wrote $jsonOut (".count($variantsOut)." variants)\n");
+    } else {
+        echo $json;
+    }
 }

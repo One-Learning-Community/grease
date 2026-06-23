@@ -39,16 +39,9 @@ networked database.
 ## Per operation (CastBench, A/B)
 
 In-memory, paired `*Vanilla` / `*Greased` subjects, so you read the per-operation
-delta directly. Representative deltas (vanilla → greased):
+delta directly — live from `CastBench` + `DateSerializationBench`:
 
-| Operation | Δ |
-| --- | :---: |
-| hydrate a row | **−34%** |
-| `toArray()` (serialize) | **−47%** |
-| set + dirty-check | **−39%** |
-| read all casts | **−27%** |
-| read an enum cast | **−48%** |
-| date serialization (timestamps / `datetime` casts) | **−87% / −89%** |
+<BenchTable section="perOp" />
 
 ```bash
 composer bench
@@ -69,12 +62,7 @@ wide model). Validate both with `php benchmarks/serialize_helpers.php`.
 Measured separately (`DispatcherBench`, `EventStormBench`), because it's app-wide,
 not per-model:
 
-| Scenario | Δ |
-| --- | :---: |
-| dispatch with no listener | **−53%** |
-| dispatch with listeners | **−18%** |
-| event-dense request, warm | **−57%** |
-| event-dense request, cold (with wildcards) | **−54%** |
+<BenchTable section="events" />
 
 On an event-dense request it roughly **halves** the event overhead. There's a further
 win on a Blade- or Livewire-heavy page: the framework fires `creating:`/`composing:`
@@ -91,15 +79,7 @@ A third axis again — the render path, not the model. The provider swaps two si
 ([`benchmarks/blade.php`](/guide/blade)) now runs **nine parity-gated variants**, each
 asserting the HTML is identical before it times anything:
 
-| Variant | Δ |
-| --- | :---: |
-| simple (initials + one attribute merge) | **−38.9%** |
-| rich (5 props, `@php`, conditionals, slots) | **−29.9%** |
-| app page (class components, slots, `@include`/`@each`, composer) | **−21.4%** |
-| data table (nested `@foreach`, heavy `$loop` use) | **−27.8%** |
-| layout (`@extends`/`@section`/`@yield`/`@push`) | **−19.4%** |
-| asset stacks (`@push`/`@prepend` per row into a `@stack`) | **−17.7%** |
-| full page (extends a layout, 5 sections, 100-row `@foreach` table, components) | **−9.3%** |
+<BenchTable section="blade" />
 
 The **full page** is the realistic composite — every tier firing at once. It lands lower
 than any single-axis variant (**−9.3%**) because on a normal page genuine work dominates

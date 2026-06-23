@@ -1,39 +1,53 @@
 #!/usr/bin/env bash
 #
-# Run the realworld macro on Linux (the canonical Docker image) and export its
-# parity-gated results as JSON for the docs to consume live.
+# Run every benchmark family on Linux (the canonical Docker image) and export their
+# parity-gated results as one JSON the docs render live. No hand-kept numbers anywhere.
 #
-# Output: docs/.vitepress/data/benchmarks.json — a committed build input. The docs
-# render their headline numbers straight from it, so the published figures are exactly
-# what this harness measured (and refuse to publish if parity fails: a PARITY FAIL
-# aborts realworld.php with a non-zero exit before any JSON is written).
+# Sections of docs/.vitepress/data/benchmarks.json:
+#   macro   — realworld.php   (end-to-end requests incl. SQL)
+#   blade   — blade.php       (component render path)
+#   perOp   — CastBench + DateSerializationBench   (per-operation A/B)
+#   events  — DispatcherBench + EventStormBench     (event dispatch A/B)
 #
-#   bash benchmarks/export-metrics.sh [rounds]
+# A PARITY FAIL in any family aborts before its JSON is written, so the docs can never
+# publish a divergent build. The README's one-line summary is synced from the same JSON.
 #
-# Requires the grease-bench image (see benchmarks/docker/Dockerfile):
-#   docker build -t grease-bench benchmarks/docker
+#   bash benchmarks/export-metrics.sh [macro_rounds] [blade_rounds]
 #
+# Requires the grease-bench image:  docker build -t grease-bench benchmarks/docker
 set -euo pipefail
 
-ROUNDS="${1:-40}"
+MACRO_ROUNDS="${1:-40}"
+BLADE_ROUNDS="${2:-20}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="docs/.vitepress/data/benchmarks.json"
+TMP=".bench-tmp"
 SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo '')"
 
-echo "→ running realworld macro (Linux/Docker, ${ROUNDS} rounds, git ${SHA:-unknown})…"
+mkdir -p "$REPO_ROOT/$TMP"
+trap 'rm -rf "$REPO_ROOT/$TMP"' EXIT
 
-docker run --rm \
-  -v "$REPO_ROOT":/app -w /app \
-  -e "GREASE_BENCH_SHA=$SHA" \
-  grease-bench \
-  php -d xdebug.mode=off -d opcache.jit=tracing -d memory_limit=1G \
-  benchmarks/realworld.php "$ROUNDS" --json="$OUT"
+dkr() {
+  docker run --rm -v "$REPO_ROOT":/app -w /app -e "GREASE_BENCH_SHA=$SHA" grease-bench "$@"
+}
+PHP="php -d xdebug.mode=off -d opcache.jit=tracing -d memory_limit=1G"
+
+echo "→ macro (realworld.php, ${MACRO_ROUNDS} rounds)…"
+dkr $PHP benchmarks/realworld.php "$MACRO_ROUNDS" --json="$OUT"
+
+echo "→ blade (blade.php, ${BLADE_ROUNDS} rounds)…"
+dkr $PHP benchmarks/blade.php 1000 "$BLADE_ROUNDS" --json="$TMP/blade.json"
+
+echo "→ micro (phpbench: CastBench, DateSerializationBench, DispatcherBench, EventStormBench)…"
+dkr php vendor/bin/phpbench run \
+  benchmarks/Bench/CastBench.php \
+  benchmarks/Bench/DateSerializationBench.php \
+  benchmarks/Bench/DispatcherBench.php \
+  benchmarks/Bench/EventStormBench.php \
+  --progress=none --dump-file="$TMP/micro.xml"
+
+echo "→ merging…"
+php "$REPO_ROOT/benchmarks/augment-metrics.php" "$REPO_ROOT/$OUT" "$REPO_ROOT/$TMP/blade.json" "$REPO_ROOT/$TMP/micro.xml"
+php "$REPO_ROOT/benchmarks/update-readme.php" || true
 
 echo "✓ wrote $OUT"
-
-# Sync the README's one-line summary from the same JSON (host-side; no DB/Docker).
-if command -v php >/dev/null 2>&1; then
-  php "$REPO_ROOT/benchmarks/update-readme.php" || true
-else
-  echo "  (php not on host — skipping README sync; the docs table is already live)"
-fi

@@ -1,17 +1,43 @@
 <script setup lang="ts">
-// Renders the live macro benchmark table from the committed JSON that
-// `benchmarks/export-metrics.sh` writes. Regenerate with:
-//   bash benchmarks/export-metrics.sh
+// Renders a section of the live benchmark JSON that benchmarks/export-metrics.sh writes.
+// Regenerate the data with:  bash benchmarks/export-metrics.sh
 import bench from '../../data/benchmarks.json'
 
-const props = withDefaults(defineProps<{ pct?: number }>(), { pct: 50 })
+const props = withDefaults(
+  defineProps<{ section?: 'macro' | 'blade' | 'perOp' | 'events'; pct?: number }>(),
+  { section: 'macro', pct: 50 },
+)
 
-const fmtMs = (us: number) => (us / 1000).toFixed(2) + ' ms'
+// Per-section presentation: column header + how to render the time columns.
+const CONFIG: Record<string, { head: string; unit: 'ms' | 'us'; from: 'us' | 'ms'; times: boolean }> = {
+  macro: { head: 'Endpoint — one request, incl. SQL', unit: 'ms', from: 'us', times: true },
+  blade: { head: 'Render — 1,000 components', unit: 'ms', from: 'ms', times: true },
+  perOp: { head: 'Operation', unit: 'us', from: 'us', times: true },
+  events: { head: 'Dispatch', unit: 'us', from: 'us', times: true },
+}
+
+const cfg = CONFIG[props.section]
+const data: any[] = (bench as any)[props.section] ?? []
+const hasPct = props.section === 'macro' || props.section === 'blade'
+
+const fmtTime = (raw: number) => {
+  if (cfg.unit === 'ms') {
+    return (cfg.from === 'ms' ? raw : raw / 1000).toFixed(2) + ' ms'
+  }
+  return raw.toFixed(raw < 10 ? 2 : 1) + ' µs'
+}
 const fmtPct = (d: number) => (d > 0 ? '+' : '−') + Math.abs(d).toFixed(0) + '%'
+const field = cfg.from === 'ms' ? '_ms' : '_us'
 
-const rows = bench.macro.map((e: any) => {
-  const p = e.percentiles?.[String(props.pct)] ?? e
-  return { label: e.label, vanilla: p.vanilla_us, grease: p.grease_us, delta: p.delta_pct }
+const rows = data.map((e: any) => {
+  // For macro/blade pick the requested percentile; perOp/events live on the row itself.
+  const src = hasPct ? e.percentiles?.[String(props.pct)] ?? e : e
+  return {
+    label: e.label,
+    vanilla: fmtTime(src['vanilla' + field]),
+    grease: fmtTime(src['grease' + field]),
+    delta: src.delta_pct,
+  }
 })
 </script>
 
@@ -19,7 +45,7 @@ const rows = bench.macro.map((e: any) => {
   <table class="bench-table">
     <thead>
       <tr>
-        <th>Endpoint — one request, incl. SQL (p{{ props.pct }})</th>
+        <th>{{ cfg.head }}<span v-if="section === 'macro' || section === 'blade'"> (p{{ props.pct }})</span></th>
         <th class="num">vanilla</th>
         <th class="num">+ Grease</th>
         <th class="num">Δ</th>
@@ -28,15 +54,15 @@ const rows = bench.macro.map((e: any) => {
     <tbody>
       <tr v-for="row in rows" :key="row.label">
         <td>{{ row.label }}</td>
-        <td class="num">{{ fmtMs(row.vanilla) }}</td>
-        <td class="num">{{ fmtMs(row.grease) }}</td>
+        <td class="num">{{ row.vanilla }}</td>
+        <td class="num">{{ row.grease }}</td>
         <td class="num delta">{{ fmtPct(row.delta) }}</td>
       </tr>
     </tbody>
   </table>
-  <p class="bench-meta">
+  <p v-if="section === 'macro'" class="bench-meta">
     Live from <code>{{ bench.source }}</code> · {{ bench.env }} · PHP {{ bench.php_version }}
-    · <code>{{ bench.git_sha }}</code> · {{ bench.rounds }} rounds · parity {{ bench.parity }}
+    · <code>{{ bench.git_sha }}</code> · parity {{ bench.parity }}
     · generated {{ bench.generated_at.slice(0, 10) }}
   </p>
 </template>
