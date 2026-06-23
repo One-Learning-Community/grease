@@ -33,7 +33,7 @@ state, so the swap is transparent):
 
 ## What it does
 
-Six wins ride on those two singletons. Each replaces work every page repeats — work that
+Seven wins ride on those two singletons. Each replaces work every page repeats — work that
 doesn't depend on your data — with a tighter path that emits the identical bytes.
 
 **On the compiler (`blade.compiler`):**
@@ -86,13 +86,20 @@ doesn't depend on your data — with a tighter path that emits the identical byt
   re-scans its own output, so Grease collapses all three into one
   `preg_replace_callback` over the alternation. Byte-identical, proven against a verbatim
   three-pass oracle.
+- **`@push` / `@prepend` stack assembly.** A component (or a loop row) that pushes its
+  assets to a `@stack` runs `stopPush()`/`stopPrepend()` once per `@endpush`/`@endprepend`,
+  and vanilla wraps each pop in `tap(array_pop(…), fn ($last) => …)` — allocating a fresh
+  bound closure every call (the profile puts the two stack `tap` closures at ~13% of a
+  push-heavy render's self-time) for a return value the compiled directive discards. Grease
+  inlines it: the same pop, the same `extendPush($last, ob_get_clean())`, the same returned
+  section name — no closure.
 
 ## Byte-identical, by test
 
 Same bar as the model tiers: the rendered HTML is **identical to the byte**. The macro
 ([`benchmarks/blade.php`](https://github.com/One-Learning-Community/grease/blob/main/benchmarks/blade.php))
-now has **seven parity-gated variants** — `page-simple`, `page-foreach`, `page-rich`,
-`page-rich-foreach`, `page-app`, `page-table`, `page-layout` — each rendered through the
+now has **eight parity-gated variants** — `page-simple`, `page-foreach`, `page-rich`,
+`page-rich-foreach`, `page-app`, `page-table`, `page-layout`, `page-stacks` — each rendered through the
 stock compiler and the greased one in two booted apps with separate compiled-view caches,
 and each asserts the HTML matches *before* it times anything. The variety is the point: the
 right fixture surfaces the lever (`page-table` is what surfaced the `@foreach` cost;
@@ -117,6 +124,7 @@ asserted identical):
 | app page | class components, slots, `@include`/`@each`, a view composer | **−21.4%** |
 | data table | nested `@foreach`, heavy `$loop` use | **−27.8%** |
 | layout | `@extends` / `@section` / `@yield` / `@push` | **−19.4%** |
+| asset stacks | `@push`/`@prepend` per row into a `@stack` | **−17.7%** |
 
 The `@foreach` variants (`page-foreach`, `page-rich-foreach`) render Taylor's avatar
 challenge in the *realistic* loop form, and land on the same ~−39% / ~−30% as their `@for`
@@ -135,10 +143,13 @@ with both gets both.
 
 Not the halving Taylor asked for, and worth saying plainly. The rest of a render is the
 compiled template *executing* (real work — your markup, the `Str` calls) plus the
-per-component resolution machinery, and the one big remaining slice — the
+per-component resolution machinery. The one big remaining slice — the
 `$__componentOriginal` save/restore boilerplate the `ComponentTagCompiler` emits around
-every `<x-…>` — lives behind a version-fragile emit rewrite that we haven't taken on yet.
-We've measured several other levers and rejected them — replacing `extract()` with a bind
+every `<x-…>` — we *did* take a hard look at, and measured it a dead end: its expensive
+statements (`resolve`/`data`/`renderComponent`) are user-class or genuine assembly, the
+save/restore guards are load-bearing for nesting and loop correctness, and the one
+removable redundancy (a doubled `isset … instanceof` predicate) *regressed* ~1% when
+hoisted. We've measured several other levers and rejected them too — replacing `extract()` with a bind
 loop (a regression: `extract` is a C builtin, ~2× faster than userland), caching
 `is_file()` (a macOS profiling artifact that's ~3% on Linux, and the wrong thing on
 principle), a `gatherData` Renderable scan (~0.1% safe, with order and side-effect parity

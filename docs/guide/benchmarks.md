@@ -88,7 +88,7 @@ many observer/wildcard listeners you've registered. See
 
 A third axis again — the render path, not the model. The provider swaps two singletons
 (`blade.compiler` and `view`) for greased, byte-identical drop-ins. The macro
-([`benchmarks/blade.php`](/guide/blade)) now runs **seven parity-gated variants**, each
+([`benchmarks/blade.php`](/guide/blade)) now runs **eight parity-gated variants**, each
 asserting the HTML is identical before it times anything:
 
 | Variant | Δ |
@@ -98,15 +98,16 @@ asserting the HTML is identical before it times anything:
 | app page (class components, slots, `@include`/`@each`, composer) | **−21.4%** |
 | data table (nested `@foreach`, heavy `$loop` use) | **−27.8%** |
 | layout (`@extends`/`@section`/`@yield`/`@push`) | **−19.4%** |
+| asset stacks (`@push`/`@prepend` per row into a `@stack`) | **−17.7%** |
 
 ```bash
 php benchmarks/blade.php
 ```
 
-That's six byte-identical wins compounded: `@props` resolution, the
+That's seven byte-identical wins compounded: `@props` resolution, the
 `$attributes->merge()` pipeline, a greased bag for class components, `getCompiledPath`
-memoization, `@foreach`'s `$loop` bookkeeping, and `@yield`'s content stitching — not the
-halving Taylor asked for. The split is by page shape: **component greasing wins on
+memoization, `@foreach`'s `$loop` bookkeeping, `@yield`'s content stitching, and the
+`@push`/`@prepend` stack assembly — not the halving Taylor asked for. The split is by page shape: **component greasing wins on
 component-dense pages, loop greasing on cheap-bodied loops** (tables, lists) — and the two
 compose with zero regression. The honest scope, the dead ends we measured and rejected,
 and how to profile it are in [Blade Components](/guide/blade).

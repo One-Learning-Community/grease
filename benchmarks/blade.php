@@ -98,6 +98,7 @@ $variants = [
     'app page (class components, slots, @include/@each, composer)' => 'page-app',
     'data table (nested @foreach, heavy $loop use)' => 'page-table',
     'layout inheritance (@extends/@section/@yield/@push)' => 'page-layout',
+    'asset stacks (@push/@prepend per row, @stack)' => 'page-stacks',
 ];
 
 echo "Taylor's challenge: render $count anonymous components, vanilla vs greased Blade.\n";

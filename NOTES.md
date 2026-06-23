@@ -514,6 +514,31 @@ Roughly highest-leverage first.
       reachable win behind the ComponentTagCompiler emit; the full rewrite the deferral
       feared is not worth its risk.** The live lever remains the `Manages*` traits behind the
       owned Factory (Stacks/Translations) — build the heavy fixture and point Excimer at it.
+    - **✅ `@push`/`@prepend` stack assembly (`ManagesStacks::stopPush`/`stopPrepend`)** — the
+      `Manages*` lever, and it paid. Built a push-heavy fixture (`page-stacks`: a layout with
+      `@stack`, a `@for` row loop each doing `@push('scripts')…@endpush` + `@prepend('head')…
+      @endprepend`, plus a `@pushOnce`) — the cheap-bodied-loop regime that surfaces this the
+      way `page-table` surfaced `@foreach`. Excimer on it (Linux, `benchmarks/docker`): vanilla
+      `stopPush`/`stopPrepend` each wrap their pop in `tap(array_pop($this->pushStack),
+      function ($last) { $this->extendPush($last, ob_get_clean()); })` — a **fresh bound
+      `Closure` allocated per `@endpush`/`@endprepend`** for a return value the compiled emit
+      (`$__env->stopPush();`) discards. The two stack `tap` closures were **6.88% + 6.10% ≈ 13%
+      of self-time**. Override drops the `tap` for the inlined pop + `extendPush($last,
+      ob_get_clean())` + same returned section name. Byte-identical (same exception/message,
+      same pop order, same `extendPush`/`extendPrepend` call, same return). Profile after: the
+      two closures **gone**; `Grease\View\Factory::stopPush`/`stopPrepend` now carry the inlined
+      `extend*` work (7.7% / 8.6%, ~3–4pp net off each path). **page-stacks macro −17.7% p50**
+      (parity ✔), zero regression on the other 7 variants. Tests: `FactoryStacksParityTest`
+      (10 cases — push/prepend/mixed/renderCount-buckets/inline-content/nested-LIFO/pushOnce +
+      both unbalanced-stop exceptions; oracle = the real vanilla `BaseFactory`). 8th macro
+      variant. Factory now overrides: addLoop, incrementLoopIndices, getLastLoop, yieldContent,
+      stopPush, stopPrepend.
+    - **❌ `ManagesTranslations` (`@lang`/`@choice`): dead lever, not pursued.** `@choice`
+      compiles straight to `app('translator')->choice(...)` (never touches the Factory), and
+      `@lang`'s `startTranslation`/`renderTranslation` are just `ob_start()` + `translator->
+      get(trim(ob_get_clean()), $replacements)` — the cost is the translator lookup, genuine
+      i18n work that's off-limits the same way `e()`/`htmlspecialchars` is. No allocation or
+      structural overhead to grease byte-identically.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
