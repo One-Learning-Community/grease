@@ -11,6 +11,7 @@ use Illuminate\Routing\Router as VanillaRouter;
 use Illuminate\Session\Middleware\StartSession;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 
 /**
  * The resolve-cache contract: `Grease\Routing\Router::resolveMiddleware()` must return the
@@ -104,8 +105,7 @@ class RouterMiddlewareParityTest extends TestCase
         $this->assertSame($vanilla, $second);
 
         // Nothing with a closure operand should have been cached.
-        $cache = (new \ReflectionProperty(GreasedRouter::class, 'greaseResolvedMiddleware'))->getValue($greased);
-        $this->assertSame([], $cache, 'closure signatures must not be cached');
+        $this->assertSame([], self::cacheOf($greased), 'closure signatures must not be cached');
     }
 
     /**
@@ -158,6 +158,77 @@ class RouterMiddlewareParityTest extends TestCase
             $greased->resolveMiddleware($signature),
         );
         $this->assertContains(SetCacheHeadersStub::class, $greased->resolveMiddleware($signature));
+    }
+
+    // ---- Eager index (grease:route-cache) seed contract ---------------------------
+
+    /**
+     * An index built as `grease:route-cache` would (signature => vanilla resolved) must, once
+     * seeded, serve every shape as a pre-populated HIT that is byte-identical to vanilla.
+     */
+    public function test_eager_index_seed_serves_hits_matching_vanilla(): void
+    {
+        $vanilla = self::router(VanillaRouter::class);
+
+        $index = [];
+        foreach (MiddlewareStack::shapes() as [$mw, $ex]) {
+            $index[GreasedRouter::greaseMiddlewareSignature($mw, $ex)] = $vanilla->resolveMiddleware($mw, $ex);
+        }
+
+        $greased = self::router(GreasedRouter::class);
+        $greased->useGreaseRouteMiddlewareCache($index);
+
+        // Genuinely seeded — every entry present before any live resolve on this instance.
+        $this->assertSame(count($index), count(self::cacheOf($greased)));
+
+        foreach (MiddlewareStack::shapes() as $label => [$mw, $ex]) {
+            $this->assertSame(
+                $vanilla->resolveMiddleware($mw, $ex),
+                $greased->resolveMiddleware($mw, $ex),
+                "seeded '$label' must match vanilla",
+            );
+        }
+    }
+
+    /**
+     * Live truth must win: a live-resolved entry is never overwritten by a (possibly stale)
+     * seeded entry for the same signature (the `+=` union semantics).
+     */
+    public function test_seed_never_overwrites_a_live_entry(): void
+    {
+        $greased = self::router(GreasedRouter::class);
+        $live = $greased->resolveMiddleware(['web']); // resolved + cached live
+
+        $key = GreasedRouter::greaseMiddlewareSignature(['web'], []);
+        $greased->useGreaseRouteMiddlewareCache([$key => ['Stale\\Bogus']]);
+
+        $this->assertSame($live, $greased->resolveMiddleware(['web']));
+    }
+
+    /**
+     * A runtime map mutation must flush seeded entries too — the next resolve goes live and
+     * matches vanilla, never serving a now-stale seed.
+     */
+    public function test_map_mutation_flushes_seeded_entries(): void
+    {
+        $key = GreasedRouter::greaseMiddlewareSignature(['web'], []);
+
+        $greased = self::router(GreasedRouter::class);
+        $greased->useGreaseRouteMiddlewareCache([$key => ['Seeded\\Stale']]);
+
+        $greased->pushMiddlewareToGroup('web', SetCacheHeadersStub::class);
+        $vanilla = self::router(VanillaRouter::class);
+        $vanilla->pushMiddlewareToGroup('web', SetCacheHeadersStub::class);
+
+        $resolved = $greased->resolveMiddleware(['web']);
+        $this->assertSame($vanilla->resolveMiddleware(['web']), $resolved);
+        $this->assertNotContains('Seeded\\Stale', $resolved);
+    }
+
+    /** Read the greased router's internal resolve cache. */
+    private static function cacheOf(GreasedRouter $router): array
+    {
+        return (new ReflectionProperty(GreasedRouter::class, 'greaseResolvedMiddleware'))->getValue($router);
     }
 }
 

@@ -47,7 +47,7 @@ trait CachesResolvedMiddleware
      */
     public function resolveMiddleware(array $middleware, array $excluded = [])
     {
-        $key = $this->greaseMiddlewareKey($middleware, $excluded);
+        $key = static::greaseMiddlewareSignature($middleware, $excluded);
 
         if ($key !== null && array_key_exists($key, $this->greaseResolvedMiddleware)) {
             return $this->greaseResolvedMiddleware[$key];
@@ -67,9 +67,11 @@ trait CachesResolvedMiddleware
      *
      * Only all-string inputs are cacheable: a closure or object in the list (inline
      * middleware, or an alias mapped to a closure) has no stable identity to key on, so we
-     * fall through to a live `parent::resolveMiddleware()` for that signature.
+     * fall through to a live `parent::resolveMiddleware()` for that signature. Public + static
+     * so the eager `grease:route-cache` builder keys the on-disk index identically — a seeded
+     * entry is only ever served on an exact signature match.
      */
-    protected function greaseMiddlewareKey(array $middleware, array $excluded): ?string
+    public static function greaseMiddlewareSignature(array $middleware, array $excluded): ?string
     {
         $key = '';
 
@@ -92,6 +94,20 @@ trait CachesResolvedMiddleware
         }
 
         return $key;
+    }
+
+    /**
+     * Pre-seed the resolve cache with an eager `grease:route-cache` index (signature => resolved
+     * sorted list). Live-resolved entries are never overwritten (`+=`), and because the index is
+     * keyed by {@see greaseMiddlewareSignature()} it is served only on an exact match — so a
+     * route whose runtime signature differs (dynamic middleware) simply misses and resolves live.
+     * A later map mutation flushes the whole cache, seeded entries included.
+     *
+     * @param  array<string, array>  $index
+     */
+    public function useGreaseRouteMiddlewareCache(array $index): void
+    {
+        $this->greaseResolvedMiddleware += $index;
     }
 
     /**
