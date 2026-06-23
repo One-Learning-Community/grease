@@ -653,11 +653,25 @@ Roughly highest-leverage first.
       (index_users −79.0%, parity green). Pinned by `HasGreasedFillParityTest` (empty no-op returns
       `$this` / empty under `preventSilentlyDiscardingAttributes` doesn't throw / non-empty respects
       fillable / totally-guarded non-empty still throws). 303 tests / 759 assertions.
-    - **Next revealed lever (not built):** with `totallyGuarded` gone, `Illuminate\Support\enum_value`
-      is the eager profile's #1 (~32% self). It's the enum-cast read path (already accelerated by
-      `HasGreasedCasts`' enum fast path, which *delegates* conversion to the framework — i.e. to
-      `enum_value`). Worth a measure-first look at whether the delegation can be tightened without
-      losing byte-identity, or whether it's irreducible framework work. Its own session.
+    - **Dead end (recorded — a measurement trap):** with `totallyGuarded` gone, the `jit=tracing`
+      profile shows `Illuminate\Support\enum_value` rocket to #1 at ~32% self. **It's a JIT
+      misattribution artifact, not a real lever.** `enum_value` is a two-`instanceof` `match()` leaf;
+      it can't be 32% self. Re-profiling with `opcache.jit=off` makes it vanish from the top frames
+      entirely — its caller `getConnectionName()` → `enum_value($this->connection)` (run once per row
+      by the greased `newFromBuilder`) gets inlined under tracing JIT, and the inlined caller's
+      samples land on the tiny callee. **Lesson:** when a trivial leaf dominates a `jit=tracing`
+      self-time profile with *no caller frame visible*, cross-check with `jit=off` (call counts stay
+      reliable; self-times don't) before believing it. The `totallyGuarded` win above was real
+      because its work (the up-front compute in `fill([])`) was genuine and survived the cross-check;
+      `enum_value` does not.
+    - **Truthful remaining frames (jit=off):** #1 is the PDO fetch closure (`Connection.php(412)`,
+      ~17% — irreducible SQL/driver work); then `initializeTraits`' dynamic-dispatch loop (~6% self —
+      the booters' *bodies* are already frozen, this is the per-`$this->{$method}()` call overhead,
+      only reducible by the wholesale `initializeTraits` override the brief flagged as higher-risk);
+      then the per-row `retrieved` model event (`Dispatcher::dispatch`/`getListeners`/`shouldDeferEvent`
+      ~14% incl — a *different axis*, already targeted by `Grease\Events\Dispatcher`, not the stock
+      dispatcher the bench wires in). No clean, low-risk model-tier lever stands out next; the eager
+      hydrate path is largely down to SQL + event dispatch + irreducible construction.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
