@@ -92,7 +92,9 @@ function percentile(array $xs, float $p): float
 
 $variants = [
     'simple avatar (initials + one merge)' => 'page-simple',
+    'simple avatar, @foreach (realistic loop)' => 'page-foreach',
     'rich avatar (5 props, @php, conditionals, slots)' => 'page-rich',
+    'rich avatar, @foreach (realistic loop)' => 'page-rich-foreach',
     'app page (class components, slots, @include/@each, composer)' => 'page-app',
     'data table (nested @foreach, heavy $loop use)' => 'page-table',
     'layout inheritance (@extends/@section/@yield/@push)' => 'page-layout',
