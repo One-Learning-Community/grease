@@ -36,16 +36,23 @@ final class PipelineHarness
         5 => '+ request',
     ];
 
-    /** Four query shapes × two response modes. */
+    /** Five query shapes × two response modes. */
     public const ROUTES = [
         'index_users.json', 'index_users.blade',
         'posts_with_author.json', 'posts_with_author.blade',
         'show_post.json', 'show_post.blade',
         'bulk_update.json', 'bulk_update.blade',
+        'filtered_users.json', 'filtered_users.blade',
     ];
 
     /** Routes that mutate the DB — parity-probed inside a rolled-back transaction. */
     public const WRITE_ROUTES = ['bulk_update.json', 'bulk_update.blade'];
+
+    /**
+     * Query string for the filtered-listing routes — a realistic paginated/filtered API
+     * call. Read through `$request->input()`/`only()`, the path the +request tier targets.
+     */
+    public const FILTER_QUERY = 'page=2&per_page=20&sort=score&dir=desc&min_age=30&active=1&q=User';
 
     private static bool $viewsWritten = false;
 
@@ -83,7 +90,12 @@ final class PipelineHarness
         $kernel = $app->make(HttpKernel::class);
         $requestClass = $level >= 5 ? GreasedRequest::class : VanillaRequest::class;
 
-        return $kernel->handle($requestClass::create('/'.$route, 'GET'));
+        $uri = '/'.$route;
+        if (str_starts_with($route, 'filtered_users')) {
+            $uri .= '?'.self::FILTER_QUERY;
+        }
+
+        return $kernel->handle($requestClass::create($uri, 'GET'));
     }
 
     /**
@@ -155,6 +167,61 @@ final class PipelineHarness
         $router->get('/bulk_update.blade', fn () => view('pipeline_users', [
             'rows' => self::bulkUpdate($m),
         ]));
+
+        // --- Filtered listing: a paginated/filtered API call read via $request->input().
+        // Idiomatic envelope — the handler reads the query to BUILD the listing and again
+        // to ECHO the applied filters/pagination back, the way a real API index does. ---
+        $router->get('/filtered_users.json', function () use ($m) {
+            $req = request();
+
+            return response()->json([
+                'data' => self::filteredUsers($m)->toArray(),
+                'meta' => [
+                    'page' => (int) $req->input('page', 1),
+                    'per_page' => (int) $req->input('per_page', 20),
+                    'sort' => $req->input('sort', 'id'),
+                    'dir' => $req->input('dir', 'asc'),
+                ],
+                'filters' => $req->only(['min_age', 'active', 'q']),
+            ]);
+        });
+        $router->get('/filtered_users.blade', fn () => view('pipeline_filtered', [
+            'rows' => self::filteredUsers($m),
+            'page' => (int) request()->input('page', 1),
+            'sort' => request()->input('sort', 'id'),
+            'dir' => request()->input('dir', 'asc'),
+            'q' => request()->input('q'),
+        ]));
+    }
+
+    /**
+     * Build a filtered, sorted, paginated user listing from the request's query input — the
+     * shape a real API index action takes. Reads through input()/only() (the +request tier's
+     * hot path); sort column is whitelisted; an id tiebreaker keeps ordering deterministic.
+     */
+    private static function filteredUsers(array $m)
+    {
+        $req = request();
+
+        $filters = $req->only(['min_age', 'active', 'q']);
+        $page = max(1, (int) $req->input('page', 1));
+        $perPage = max(1, (int) $req->input('per_page', 20));
+        $sort = in_array($req->input('sort'), ['id', 'name', 'score', 'age'], true) ? $req->input('sort') : 'id';
+        $dir = $req->input('dir') === 'desc' ? 'desc' : 'asc';
+
+        $q = $m['user']::query();
+        if (isset($filters['min_age'])) {
+            $q->where('age', '>=', (int) $filters['min_age']);
+        }
+        if (isset($filters['active'])) {
+            $q->where('is_active', (bool) (int) $filters['active']);
+        }
+        if (! empty($filters['q'])) {
+            $q->where('name', 'like', '%'.$filters['q'].'%');
+        }
+
+        return $q->orderBy($sort, $dir)->orderBy('id')
+            ->offset(($page - 1) * $perPage)->limit($perPage)->get();
     }
 
     /** Load 150 users, bump score, save — the write workload. */
@@ -247,6 +314,10 @@ final class PipelineHarness
         );
         file_put_contents($views.'/pipeline_post.blade.php',
             "<x-row :a=\"\$row->title\" :b=\"\$row->view_count\" :c=\"\$row->user->name\" :d=\"\$row->is_published\" data-id=\"{{ \$row->id }}\" />\n"
+        );
+        file_put_contents($views.'/pipeline_filtered.blade.php',
+            "<h1>sort={{ \$sort }} {{ \$dir }} · page {{ \$page }} · q={{ \$q }}</h1>\n".
+            "@foreach (\$rows as \$r)<x-row :a=\"\$r->name\" :b=\"\$r->email\" :c=\"\$r->score\" :d=\"\$r->age\" data-id=\"{{ \$r->id }}\" />\n@endforeach\n"
         );
 
         self::$viewsWritten = true;
