@@ -559,6 +559,33 @@ Roughly highest-leverage first.
       **Net: the reachable Blade surface is exhausted** — 7 wins shipped, the rest measured-dead
       or genuine work.
 
+11. **Eloquent `Model::resolveClassAttribute` per-instance tax (NEXT TIER CANDIDATE — strong).**
+    Went looking for an eager-load *matching* tier (`Relation::match`/`buildDictionary`);
+    measure-first killed it (`benchmarks/eager_excimer.php`, Excimer on docker, `GUser::
+    with('posts')->get()`, 100 users × 20 posts): matching is **thin** — `getDictionaryKey`
+    1.1%, `applyInverseRelationToCollection` 1.2%, `buildDictionary` not even in the top frames.
+    A matching tier would be marginal. **But the same profile surfaced the real lever: `Model::
+    resolveClassAttribute` at 37% self-time** — the single dominant frame on the eager/hydration
+    path, *and this is with `HasGrease` already on*. What it is: resolves class-level PHP
+    attributes (`#[Table]`/`#[Fillable]`/`#[Hidden]`/`#[Appends]`/`#[Connection]`/`#[Touches]`/
+    `#[DateFormat]`/`#[Guarded]`/`#[Visible]`…, a newer L11/L12 feature). It *is* cached
+    (`static::$classAttributes`) — but keyed by a **freshly-concatenated `$class.'@'.$attributeClass`
+    string built on every call**, and it's called **~13× per model instance** from the per-instance
+    `initialize*` trait booters (GuardsAttributes/HidesAttributes/HasAttributes/HasTimestamps/
+    HasRelationships) + `getTable`/`getConnectionName`. At ~2,100 hydrated instances/`get()` ×
+    ~13 = ~27k cache-key string allocations per request — the allocation tax Grease specializes
+    in. **Greasing hypothesis (byte-identical, model-axis — fits HasGrease):** the resolved
+    values are per-class constants; (a) cheapest: a Grease trait overrides `resolveClassAttribute`
+    (a trait method overrides the inherited `Model` method) with a **concat-free nested cache**
+    `[$class][$attributeClass]` to kill the per-call string alloc; (b) deeper: freeze the
+    `initialize*`-derived state once per class in the blueprint and skip the calls entirely
+    (bigger override surface). Measure-first: A/B (a) before (b) — don't trust the structural
+    hunch (str_contains/strtr/predicate-hoist all looked right and lost). Parity bar: byte-
+    identical hydrated model (same fillable/hidden/appends/table/casts). Harness: `eager_excimer.php`
+    (kept, the reusable model/eager profiler — analogue of `blade_excimer.php`). **This is the
+    strongest next Eloquent-axis tier — recent feature, hot path, allocation-shaped, core left
+    it unoptimized.**
+
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
       (the README badge lights up on first run).
