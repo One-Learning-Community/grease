@@ -68,12 +68,31 @@ if (($argv[1] ?? null) === '--arm') {
 
 // --- Orchestrator. ---------------------------------------------------------------
 
-$iterations = (int) ($argv[1] ?? 120);
+// `--json[=path]` emits the stack matrix as the live `stack` section the docs render
+// (written to <path>, or stdout), suppressing the human table — same measurement.
+$cliArgs = array_slice($argv, 1);
+$jsonOut = null;
+$emitJson = false;
+foreach ($cliArgs as $i => $a) {
+    if ($a === '--json' || str_starts_with($a, '--json=')) {
+        $emitJson = true;
+        $jsonOut = str_contains($a, '=') ? substr($a, 7) : null;
+        unset($cliArgs[$i]);
+    }
+}
+$cliArgs = array_values($cliArgs);
+$say = function (string $line) use ($emitJson): void {
+    if (! $emitJson) {
+        echo $line;
+    }
+};
+
+$iterations = (int) ($cliArgs[0] ?? 120);
 $php = escapeshellarg(PHP_BINARY);
 $self = escapeshellarg(__FILE__);
 
-echo "Cumulative-stack pipeline — full request through the kernel, per Grease level.\n";
-echo "Each level is a superset of the prior. Responses hashed for parity; memory tracked.\n\n";
+$say("Cumulative-stack pipeline — full request through the kernel, per Grease level.\n");
+$say("Each level is a superset of the prior. Responses hashed for parity; memory tracked.\n\n");
 
 $levels = [];
 foreach (array_keys(H::LEVELS) as $level) {
@@ -105,7 +124,43 @@ foreach (H::ROUTES as $route) {
 if (! $parityOk) {
     exit(1);
 }
-echo "Parity: OK — every level's response byte-identical to vanilla, all 200.\n\n";
+$say("Parity: OK — every level's response byte-identical to vanilla, all 200.\n\n");
+
+// --- JSON emit (the live `stack` section the docs render). -----------------------
+
+if ($emitJson) {
+    $levelNames = array_values(H::LEVELS);
+    $mv = $levels[0]['mem_retained'];
+
+    $routes = [];
+    foreach (H::ROUTES as $route) {
+        $v = $levels[0]['routes'][$route]['us'];
+        $deltas = [];
+        foreach (array_keys(H::LEVELS) as $level) {
+            $us = $levels[$level]['routes'][$route]['us'];
+            $deltas[] = round(($us - $v) / $v * 100, 1);
+        }
+        $routes[] = ['route' => $route, 'vanilla_us' => round($v, 1), 'deltas' => $deltas];
+    }
+
+    $memory = ['retained_mb' => [], 'retained_delta_pct' => [], 'peak_mb' => []];
+    foreach (array_keys(H::LEVELS) as $level) {
+        $memory['retained_mb'][] = round($levels[$level]['mem_retained'] / 1048576, 2);
+        $memory['retained_delta_pct'][] = round(($levels[$level]['mem_retained'] - $mv) / $mv * 100, 2);
+        $memory['peak_mb'][] = round($levels[$level]['mem_peak'] / 1048576, 2);
+    }
+
+    $payload = ['levels' => $levelNames, 'routes' => $routes, 'memory' => $memory];
+
+    if ($jsonOut !== null) {
+        file_put_contents($jsonOut, json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
+        fwrite(STDERR, "wrote $jsonOut (stack: ".count($routes)." routes × ".count($levelNames)." levels)\n");
+    } else {
+        echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
+    }
+
+    return;
+}
 
 // --- Timing table: cumulative delta from vanilla, per route. ---------------------
 

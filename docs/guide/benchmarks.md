@@ -98,6 +98,33 @@ component-dense pages, loop greasing on cheap-bodied loops** (tables, lists) —
 compose with zero regression. The honest scope, the dead ends we measured and rejected,
 and how to profile it are in [Blade Components](/guide/blade).
 
+## The whole stack, compounding
+
+The tiers are independent opt-ins, and they **stack**. This is a *real request through
+the HTTP kernel* — boot, route, query the DB (the four shapes above, plus a
+filtered/paginated API listing), serialize to JSON **and** render to Blade — measured with
+each tier layered in, in order of least-invasive opt-in: `+models` → `+events` → `+blade` →
+[`+container`](/guide/container) → [`+request`](/guide/request). Every cell is byte-identical
+to vanilla (a [parity test](/guide/caveats) asserts all five shapes × six levels before any
+timing), and the last row is the cumulative **retained-memory** cost of all those caches.
+
+<StackTable />
+
+Read it by column: `+models` does the heavy lifting on data-bound routes (JSON especially);
+the **Blade** tier shows up where a page actually renders (`*.blade` rows roughly double
+their delta when it lands); `+container` and `+request` add the final, smaller compounding
+slices — resolution and input-reading are *thin slices* of a full request, so each moves it
+a few percent, honestly. The headline: the full mixed page-load suite runs **~−47%** end to
+end, and the entire six-tier cache footprint costs **~+2% retained memory** — the caches are
+nearly free against a request's working set. The isolated per-tier numbers (container
+−38.8% per resolve, request −41% per input-heavy request) are in
+[The Container](/guide/container) and [The Request](/guide/request).
+
+```bash
+php benchmarks/stack_pipeline.php     # the table above, human-readable
+composer bench -- benchmarks/Bench/StackPipelineBench.php   # phpbench, per-level
+```
+
 ## How to read these honestly
 
 This package was built measure-first, and the docs hold the same line. A few things

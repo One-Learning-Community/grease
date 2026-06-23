@@ -46,8 +46,11 @@ dkr php vendor/bin/phpbench run \
   benchmarks/Bench/EventStormBench.php \
   --progress=none --dump-file="$TMP/micro.xml"
 
+echo "→ stack (stack_pipeline.php, cumulative tiers × JSON+Blade)…"
+dkr $PHP benchmarks/stack_pipeline.php 120 --json="$TMP/stack.json"
+
 echo "→ merging…"
-php "$REPO_ROOT/benchmarks/augment-metrics.php" "$REPO_ROOT/$OUT" "$REPO_ROOT/$TMP/blade.json" "$REPO_ROOT/$TMP/micro.xml"
+php "$REPO_ROOT/benchmarks/augment-metrics.php" "$REPO_ROOT/$OUT" "$REPO_ROOT/$TMP/blade.json" "$REPO_ROOT/$TMP/micro.xml" "$REPO_ROOT/$TMP/stack.json"
 php "$REPO_ROOT/benchmarks/update-readme.php" || true
 
 echo "✓ wrote $OUT"
