@@ -138,6 +138,65 @@ class RequestInputParityTest extends TestCase
         $this->assertSame(var_export($vanilla, true), var_export($greased, true));
     }
 
+    /**
+     * Lifecycle paths that swap whole bags after the memo is warmed. Each warms the memo,
+     * performs the lifecycle operation, then re-reads — greased must match vanilla.
+     *
+     * @return iterable<string, array{0: callable(class-string): mixed}>
+     */
+    public static function lifecycle(): iterable
+    {
+        // duplicate() = clone (copies the memo) + swap bags. The dup must reflect the NEW
+        // query, not the warmed original's. This path is also hit under route:cache.
+        yield 'duplicate swaps query' => [function (string $class) {
+            $r = $class::create('/x?a=1&b=2', 'GET');
+            $r->input('a'); // warm the original
+            $dup = $r->duplicate(['a' => 'new', 'c' => '3']);
+
+            return [$dup->input('a'), $dup->input('b', 'MISSING'), $dup->input('c'), $dup->all()];
+        }];
+
+        // A plain clone shares no state with the original: mutating the clone must not
+        // touch the original (and vice versa).
+        yield 'clone is independent' => [function (string $class) {
+            $r = $class::create('/x', 'POST', ['a' => 'orig']);
+            $r->input('a');
+            $clone = clone $r;
+            $clone->merge(['a' => 'cloned']);
+
+            return [$r->input('a'), $clone->input('a')];
+        }];
+
+        // setMethod() rewrites REQUEST_METHOD → getInputSource() flips request→query, so a
+        // body-only key disappears from input().
+        yield 'setMethod flips input source' => [function (string $class) {
+            $r = $class::create('/x?qonly=Q', 'POST', ['ponly' => 'P']);
+            $before = [$r->input('qonly'), $r->input('ponly', 'NIL')];
+            $r->setMethod('GET');
+            $after = [$r->input('qonly'), $r->input('ponly', 'NIL')];
+
+            return [$before, $after];
+        }];
+
+        // initialize() re-seeds every bag.
+        yield 'initialize reseeds' => [function (string $class) {
+            $r = $class::create('/x?a=1', 'GET');
+            $r->all();
+            $r->initialize(['a' => 'reinit', 'z' => '9']);
+
+            return [$r->input('a'), $r->input('z'), $r->all()];
+        }];
+    }
+
+    #[DataProvider('lifecycle')]
+    public function test_lifecycle_path_invalidates_like_vanilla(callable $probe): void
+    {
+        $this->assertSame(
+            var_export($probe(VanillaRequest::class), true),
+            var_export($probe(GreasedRequest::class), true),
+        );
+    }
+
     public function test_repeated_reads_are_stable(): void
     {
         $r = self::post(GreasedRequest::class);

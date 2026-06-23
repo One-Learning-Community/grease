@@ -20,12 +20,18 @@ use Illuminate\Support\Arr;
  * pure function of the (immutable) content-type header, so it's memoized for the life of
  * the instance.
  *
- * Carve-out (documented, mirrors the Eloquent `$casts`-in-constructor caveat): **direct
- * bag mutation** — `$request->request->set(...)`, `$request->query->add(...)` — is not
- * cheaply observable and is unsupported after the first input read on a greased request.
- * Use the Laravel-level mutators (`merge`/`replace`/`offsetSet`) instead, which the memo
- * tracks. Likewise `setMethod()` after a read (switching the GET/HEAD input source) is
- * unsupported.
+ * Every observable mutation path is tracked. The value mutators (`merge`/`mergeIfMissing`/
+ * `replace`/`offsetSet`/`offsetUnset`/`setJson`) flush the base arrays. The lifecycle
+ * paths that swap whole bags — `__clone()` (and therefore `duplicate()`), `initialize()`,
+ * and `setMethod()` (which rewrites `REQUEST_METHOD`, flipping `getInputSource()` between
+ * the query and request bags) — flush as well; `__clone`/`initialize` also drop the
+ * `isJson` memo since they can change the content-type.
+ *
+ * The ONE carve-out (documented, mirrors the Eloquent `$casts`-in-constructor caveat):
+ * **direct bag mutation** — `$request->request->set(...)`, `$request->query->add(...)`,
+ * `$request->json()->set(...)` — bypasses every method and is not cheaply observable, so
+ * it's unsupported after the first input read on a greased request. Use the Laravel-level
+ * mutators instead, which the memo tracks.
  */
 trait MemoizesRequestInput
 {
@@ -136,8 +142,48 @@ trait MemoizesRequestInput
     }
 
     /**
-     * Drop the memoized input maps. `isJson` is not flushed — the content-type header is
-     * immutable for the life of the request.
+     * {@inheritDoc}
+     *
+     * Rewrites REQUEST_METHOD, which `getRealMethod()` reads and `getInputSource()` uses
+     * to choose the query vs request bag — so the merged base can change. (`isJson` is
+     * unaffected: the content-type header doesn't change.)
+     */
+    public function setMethod(string $method): void
+    {
+        parent::setMethod($method);
+
+        $this->flushGreaseInput();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * Re-seeds every bag. Drop the full memo, content-type classification included.
+     */
+    public function initialize(array $query = [], array $request = [], array $attributes = [], array $cookies = [], array $files = [], array $server = [], $content = null): void
+    {
+        parent::initialize($query, $request, $attributes, $cookies, $files, $server, $content);
+
+        $this->flushGreaseInput();
+        $this->greaseIsJson = null;
+    }
+
+    /**
+     * Clone clones every bag (and `duplicate()` is clone-then-swap-bags). The copied memo
+     * would describe the pre-clone bags, so drop it — and the `isJson` memo too, since a
+     * `duplicate()` can swap the server bag and change the content-type.
+     */
+    public function __clone()
+    {
+        parent::__clone();
+
+        $this->flushGreaseInput();
+        $this->greaseIsJson = null;
+    }
+
+    /**
+     * Drop the memoized input maps. Used by the value mutators, where the content-type
+     * (and thus `isJson`) is unchanged so it's left intact.
      */
     protected function flushGreaseInput(): void
     {
