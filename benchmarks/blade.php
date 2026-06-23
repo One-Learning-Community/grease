@@ -99,6 +99,7 @@ $variants = [
     'data table (nested @foreach, heavy $loop use)' => 'page-table',
     'layout inheritance (@extends/@section/@yield/@push)' => 'page-layout',
     'asset stacks (@push/@prepend per row, @stack)' => 'page-stacks',
+    'full page (extends layout, 5 sections, 100-row @foreach table, components)' => 'page-full',
 ];
 
 echo "Taylor's challenge: render $count anonymous components, vanilla vs greased Blade.\n";

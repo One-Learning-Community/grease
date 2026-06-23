@@ -539,6 +539,25 @@ Roughly highest-leverage first.
       get(trim(ob_get_clean()), $replacements)` — the cost is the translator lookup, genuine
       i18n work that's off-limits the same way `e()`/`htmlspecialchars` is. No allocation or
       structural overhead to grease byte-identically.
+    - **❌ `ManagesLayouts` (beyond `@yield`): nothing left.** Audited the trait while building
+      the composite: `stopSection`/`appendSection` already use a direct `array_pop` (no `tap`
+      closure, unlike `ManagesStacks` — so the Stacks win does NOT transfer here), `extendSection`
+      is a genuine `@parent` `str_replace`, and `yieldContent` is the one already greased. Lean.
+    - **✅/📊 `page-full` composite — the honest realistic ceiling + a fresh exhaustion check.**
+      Built a standard full page (`page-full`: `@extends` a primary layout filling
+      head/styles/scripts/footer/content, a `@parent` footer override, a 100-row `@foreach`
+      table with real per-cell work, 3 class components) — every tier firing at once. **−9.3%
+      p50** (parity ✔), *lower* than any single-axis variant — the regime insight, quantified:
+      on a realistic page the greasable framework slice is small. Excimer (greased) self-time:
+      **~53% the compiled template bodies** (3 view files: 39.7 + 7.3 + 5.8% — user markup),
+      **~24% `e()`** (≈500 escaped cells, htmlspecialchars-bound), then everything else thin and
+      **either already greased** (`getLastLoop` 4.8, `yieldContent` 2.8, `incrementLoopIndices`
+      1.1, `merge`, `addLoop`) **or an established dead end** (`isFile`, `evaluatePath`/extract,
+      `gatherData`, `Component::resolve`/`data`/`extractPublicMethods`, `componentData`). **No
+      new reachable lever** — the composite confirms the strand compounds cleanly (zero
+      regression) and the ceiling is genuine template work + escaping. 9th macro variant.
+      **Net: the reachable Blade surface is exhausted** — 7 wins shipped, the rest measured-dead
+      or genuine work.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green

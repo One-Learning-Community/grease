@@ -98,8 +98,8 @@ doesn't depend on your data — with a tighter path that emits the identical byt
 
 Same bar as the model tiers: the rendered HTML is **identical to the byte**. The macro
 ([`benchmarks/blade.php`](https://github.com/One-Learning-Community/grease/blob/main/benchmarks/blade.php))
-now has **eight parity-gated variants** — `page-simple`, `page-foreach`, `page-rich`,
-`page-rich-foreach`, `page-app`, `page-table`, `page-layout`, `page-stacks` — each rendered through the
+now has **nine parity-gated variants** — `page-simple`, `page-foreach`, `page-rich`,
+`page-rich-foreach`, `page-app`, `page-table`, `page-layout`, `page-stacks`, `page-full` — each rendered through the
 stock compiler and the greased one in two booted apps with separate compiled-view caches,
 and each asserts the HTML matches *before* it times anything. The variety is the point: the
 right fixture surfaces the lever (`page-table` is what surfaced the `@foreach` cost;
@@ -125,10 +125,23 @@ asserted identical):
 | data table | nested `@foreach`, heavy `$loop` use | **−27.8%** |
 | layout | `@extends` / `@section` / `@yield` / `@push` | **−19.4%** |
 | asset stacks | `@push`/`@prepend` per row into a `@stack` | **−17.7%** |
+| full page | extends a layout, 5 sections, a 100-row `@foreach` table, components | **−9.3%** |
 
 The `@foreach` variants (`page-foreach`, `page-rich-foreach`) render Taylor's avatar
 challenge in the *realistic* loop form, and land on the same ~−39% / ~−30% as their `@for`
 counterparts — confirming the tiers compose with zero regression.
+
+The **full page** is the most honest single number: a standard page that `@extends` a
+primary layout, fills `head`/`styles`/`scripts`/`footer`/`content` (with a `@parent`
+override), renders a 100-row `@foreach` table, and drops in a few components — every tier
+firing at once. It lands at **−9.3%**, *lower* than any single-axis variant, and that's the
+truth of the regime: on a realistic page the greasable framework slice is small because
+genuine work dominates. A profile (Excimer) puts ~53% of the render in the compiled
+template bodies (your markup) and ~24% in `e()`/`htmlspecialchars` (escaping ~500 table
+cells) — both genuine, both off-limits. The remaining ~23% is spread thin across the engine
+and Factory, and every greasable piece of it is *already* greased. So the single-axis
+numbers above are what each tier is worth where it dominates; −9.3% is what they compound
+to where they don't.
 
 ::: tip The regime insight — which fixture wins on which tier
 The wins split by **what the loop body costs**, and that's worth knowing when you reason

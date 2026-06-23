@@ -88,7 +88,7 @@ many observer/wildcard listeners you've registered. See
 
 A third axis again — the render path, not the model. The provider swaps two singletons
 (`blade.compiler` and `view`) for greased, byte-identical drop-ins. The macro
-([`benchmarks/blade.php`](/guide/blade)) now runs **eight parity-gated variants**, each
+([`benchmarks/blade.php`](/guide/blade)) now runs **nine parity-gated variants**, each
 asserting the HTML is identical before it times anything:
 
 | Variant | Δ |
@@ -99,6 +99,12 @@ asserting the HTML is identical before it times anything:
 | data table (nested `@foreach`, heavy `$loop` use) | **−27.8%** |
 | layout (`@extends`/`@section`/`@yield`/`@push`) | **−19.4%** |
 | asset stacks (`@push`/`@prepend` per row into a `@stack`) | **−17.7%** |
+| full page (extends a layout, 5 sections, 100-row `@foreach` table, components) | **−9.3%** |
+
+The **full page** is the realistic composite — every tier firing at once. It lands lower
+than any single-axis variant (**−9.3%**) because on a normal page genuine work dominates
+(~53% compiled template bodies, ~24% `e()` escaping — both off-limits); the single-axis
+rows show what each tier is worth where it *does* dominate.
 
 ```bash
 php benchmarks/blade.php
