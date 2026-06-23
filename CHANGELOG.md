@@ -6,8 +6,59 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-23
+
+The performance surface roughly doubles. The Eloquent model trait grows from four tiers
+to **seven** and gains three byte-identical short-circuits on the hot read/write paths; a
+full drop-in Blade view **Factory** joins the compiler as a second render-path axis; the
+event dispatcher's view-event guard is memoized; and every published benchmark number is
+now generated live from the parity-gated harness. Output stays byte-identical to vanilla
+throughout — the parity suite grows to **317 tests / 867 assertions**.
+
 ### Added
 
+- **Three new Eloquent model tiers** — `HasGrease` now composes seven, each a method
+  override that reads the per-class blueprint and falls back to `parent::`:
+  - **`HasGreasedClassAttributes`** — caches `Model::resolveClassAttribute()` (the
+    `#[Table]`/`#[Fillable]`/`#[Hidden]`/`#[Appends]`/… lookups the per-instance
+    `initialize*` booters run ~13× per `new` model) behind a concat-free
+    `[class][attribute]` carve-out, replacing vanilla's freshly-built `"$class@$attr"`
+    cache key. Byte-identical bug-for-bug, including vanilla's property-less cache-key
+    collision quirk. **−13% on a 2,100-row eager `get()`.**
+  - **`HasGreasedInitializers`** — freezes the four surviving `initialize*` trait booters
+    (guards / hides / timestamps / touches) per class: the cold path runs `parent::` once
+    and snapshots the resulting properties; warm instances apply the snapshot by copy,
+    eliminating the `resolveClassAttribute()` calls entirely. **−8.4%** on the eager
+    `get()`, on top of the cache above.
+  - **`HasGreasedCastProbes`** — memoizes the per-key cast-classification probes
+    (`isEnumCastable` / `isClassCastable` / `isClassSerializable`) that
+    `addCastAttributesToArray()` reruns on every row during `toArray()`. The verdict is a
+    pure function of the cast type; memoized per `[class][probe][key]` (with
+    `array_key_exists`, since the common verdict is `false`), reusing the casts-divergence
+    guard. **−10% on a rich-cast `get()->toArray()`.**
+- **A greased Blade view Factory (`Grease\View\Factory`) — a second Blade render-path
+  axis**, bound as the `view` singleton by `GreaseViewServiceProvider` alongside the
+  compiler. It overrides the hottest, allocation-shaped frames on the render path, each
+  byte-identical and gated by a parity-asserted macro:
+  - `@foreach` `$loop` bookkeeping — an in-place by-ref index update instead of an
+    `array_merge` of the 10-key state every iteration (**−27% on a `$loop`-heavy table**);
+  - `@yield` — one `preg_replace_callback` over three non-overlapping markers in place of
+    vanilla's three `str_replace` scans of the whole section (**−19% on a layout**);
+  - `@push`/`@prepend` stack assembly — drops the per-pop `tap()` closure (**−18% on
+    asset stacks**);
+  - a one-line emit seed so class/no-`@props` components build the greased
+    `ComponentAttributeBag` from the start, and `getCompiledPath()` memoization.
+- **`Grease\View\ComponentAttributeBag`** — a `ComponentAttributeBag` subclass whose
+  `merge()` is two plain `foreach` loops instead of vanilla's ~5-allocation Collection
+  pipeline (`partition`/`mapWithKeys`/`->merge`/`->all`). The compiler hands components
+  this subclass, so the `$attributes->merge([...])` nearly every component runs takes the
+  fast path; `merge()` returns `new static` to stay greased down a chain. Together with
+  the compiler and Factory: **−38.7% simple / −30.6% rich** on a 1,000-component render.
+- **Live benchmark pipeline** — `bash benchmarks/export-metrics.sh` runs every family on
+  the canonical Linux Docker image and writes a single parity-gated
+  `docs/.vitepress/data/benchmarks.json` that the docs (and the README's one-line summary)
+  render from. The published numbers are now exactly what the harness measured, and a
+  `PARITY FAIL` in any family aborts before its JSON is written.
 - **A greased Blade compiler (`Grease\View\Compiler`) — a new opt-in tier** that rewrites
   one emit, `@props` resolution, the per-render hot path every component pays. Vanilla
   compiles `@props` to a ~20-line block that, on each render, rebuilds a flat name list
@@ -38,6 +89,23 @@ All notable changes to `grease` are documented here. The format is based on
 
 ### Changed
 
+- **Three byte-identical short-circuits on the model hot paths**, added to the existing
+  hydration and serialization tiers:
+  - **Empty `fill([])`** — the no-op that `__construct` runs on every hydrated row (via
+    `newFromBuilder`'s `new static`) still computed `totallyGuarded()` and
+    `fillableFromArray([])` up front. `HasGreasedHydration` now returns `$this` early on
+    `[]`. **−5% on an eager `get()`.**
+  - **Relation-less `toArray()`** — vanilla wraps every `toArray()` in `withoutRecursion()`
+    (a `debug_backtrace` + `Onceable` trace-hash + WeakMap, to guard circular relations).
+    With no relations loaded there is nothing to recurse into, so `HasGreasedSerialization`
+    returns `attributesToArray()` directly; any loaded relation defers to `parent::`, guard
+    intact. Byte-identical, including the circular-relation case. **−27% on a relation-less
+    `get()->toArray()`** (index endpoint −81% → −86%).
+  - **`fromDateTime()` on dirty-checks** — `originalIsEquivalent()` on `save()` compares a
+    date column as `fromDateTime($attr) === fromDateTime($original)`, where the operands are
+    storage strings — so vanilla parses each into Carbon and formats it straight back to the
+    identical string. A per-class probe certifies the round-trip and the fast path returns
+    the string as-is. **−38% on a `save()`-heavy dirty-check.**
 - **`Grease\Events\Dispatcher::hasListeners()` now memoizes its presence check** per
   event name, against the same cache the `dispatch()` fast path already used (reset on
   `listen()`/`forget()`, so behaviour is identical). Previously only `dispatch()`
@@ -111,6 +179,7 @@ dirty-check.
 - PHP 8.2+
 - Laravel 12 / 13
 
-[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/One-Learning-Community/grease/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/One-Learning-Community/grease/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/One-Learning-Community/grease/releases/tag/v0.1.0
