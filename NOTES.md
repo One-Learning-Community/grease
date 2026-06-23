@@ -490,6 +490,30 @@ Roughly highest-leverage first.
       the other `Manages*` traits (Stacks/Translations) are still reachable for the same
       treatment — build the fixture that exercises them and point Excimer at it (the lesson
       that keeps paying: `page-table` surfaced `@foreach`, `page-layout` surfaced `@yield`).
+    - **❌ ComponentTagCompiler per-instance boilerplate: investigated → measured DEAD END**
+      (the deferred "higher-risk session" — closed without the rewrite). Dumped the emitted
+      per-`<x-…>` scaffolding (`dump_compiled.php page-app`) and classified every statement.
+      The expensive calls inside it — `X::resolve()`, `$component->data()`,
+      `startComponent`/`renderComponent` — are the *already-recorded* off-limits dead ends
+      (user-class statics / genuine `array_merge` assembly); the boilerplate only *looks*
+      dominant in the compiled-body self-time because that frame **inlines** them, not because
+      the `isset`/`instanceof`/`unset` opcodes are expensive. Of the pure scaffolding, the
+      save/restore dance is **load-bearing and irreducible byte-identically**: the `isset`
+      save-guards are required for composability (the view can be `@include`d into a scope
+      that already has `$component`/`$attributes`), and the `unset` on restore is required for
+      loop correctness (without it a stale `$__…Original{hash}` from a prior iteration would be
+      wrongly restored when `$attributes` is unset that pass). The **one** genuinely removable
+      redundancy is the `isset($attributes) && $attributes instanceof Bag` predicate evaluated
+      *twice* per component (resolve()-arg + the `except` guard; `$attributes` is unchanged
+      between them). Micro-A/B'd it (`benchmarks/_ab_boilerplate.php`, since removed — hoisted
+      the double eval into one temp, parity-gated identical HTML, page-app/200 components,
+      Linux `benchmarks/docker`, JIT on): hoisting is a **consistent ~0.7–1.0% REGRESSION**
+      (6831→6883, 6884→6953, 6991→7040 µs/render across 3 interleaved pairs). Same shape as
+      the `str_contains` and `extract→loop` dead ends — the op is too cheap for fewer-evals to
+      pay, and the temp's ASSIGN+read costs more than the saved re-eval. **Verdict: no
+      reachable win behind the ComponentTagCompiler emit; the full rewrite the deferral
+      feared is not worth its risk.** The live lever remains the `Manages*` traits behind the
+      owned Factory (Stacks/Translations) — build the heavy fixture and point Excimer at it.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
