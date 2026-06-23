@@ -31,5 +31,6 @@ trait HasGrease
     use HasGreasedClassAttributes;
     use HasGreasedInitializers;
     use HasGreasedCasts;
+    use HasGreasedCastProbes;
     use HasGreasedSerialization;
 }

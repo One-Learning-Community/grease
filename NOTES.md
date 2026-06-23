@@ -692,12 +692,34 @@ Roughly highest-leverage first.
       - **Consequence:** the initializer-freeze (−8.4%) and fill short-circuit (−5.2%) are real wins on
         a *hydration-heavy* workload, but on these specific endpoints they're diluted — which is the
         honest reason the macro moved only −77.8%→−79.5% (index_users) etc., not by the per-op delta.
-      - **New levers the proxy hid (unvalidated, future threads):** (1) the `withoutRecursion`/`Onceable`
-        recursion-guard overhead on `toArray()` (~13% on index_users) — a per-model guard Laravel runs
-        on every serialize; (2) the Carbon re-parse in `originalIsEquivalent`/`getDirty` on the write
-        path (`bulk_update`) — date *input* comparison, distinct from the date *output* the serialization
-        tier already greases; (3) `getCasts` still ~6% self on index_users *despite* being memoized —
-        pure call frequency from the per-attribute cast loop. Measure-first each before believing.
+      - **New levers the proxy hid:** (1) ✅ **SHIPPED** — the per-key cast-classification probes (see
+        next entry); (2) the Carbon re-parse in `originalIsEquivalent`/`getDirty` on the write path
+        (`bulk_update`) — date *input* comparison, distinct from the date *output* the serialization tier
+        already greases; (3) `getCasts` still ~6% self on index_users *despite* being memoized — pure
+        call frequency from the per-attribute cast loop; (4) the `withoutRecursion`/`Onceable`
+        recursion-guard overhead on `toArray()` (~13% on index_users, now relatively more prominent) — a
+        per-model guard Laravel runs on every serialize. (2)/(3)/(4) unvalidated; measure-first each.
+    - ✅ **SHIPPED: `HasGreasedCastProbes`** (7th model tier, in `HasGrease`) — the lever the
+      profile-the-real-endpoints exercise surfaced, which the hydration-shaped `eager_excimer` proxy had
+      hidden entirely. Vanilla's `addCastAttributesToArray()` classifies every cast key on every row via
+      `isEnumCastable()`/`isClassCastable()`/`isClassSerializable()` (and the third re-runs the first
+      two) — **~10% cumulative self** on the `index_users`/`posts_with_author` profile (rich casts:
+      boolean/decimal:2/array/datetime). The verdict is a pure function of `getCasts()[$key]`, class-pure
+      exactly like `getCastType` — so memoize it per `[class][probe][key]`. Two correctness points: (a)
+      **`array_key_exists`, not `??=`** — the common verdict is `false`, which `??=` would treat as unset
+      and re-probe every row (the same null-memo trap as `HasGreasedClassAttributes`); (b) reuse the
+      `greaseCastsDiverged` flag — a runtime `mergeCasts()`/`withCasts()` defers to live `parent::`, so a
+      key whose cast type changed is never answered stale (this couples the tier to `HasGreasedAttributes`,
+      always paired in `HasGrease`). Because vanilla calls the probes through `$this->`, the overrides are
+      hit even from *inside* the `parent::addCastAttributesToArray()` loop `HasGreasedSerialization`
+      delegates to — the win lands with no array-builder reimplementation. **Measured:** the three probe
+      frames (~10% self) collapse to one memoized `greaseCastProbe` (~4.7%); tier-isolated A/B
+      (`benchmarks/castprobes_ab.php`, prior-6 vs full-7, parity-gated, mean of 3): **−10.2%** on a
+      rich-cast `get()->toArray()`. Unlike the hydration wins this one moves the macro — **index_users
+      −79.5% → −81.2%, posts_with_author → −80.9%** (it targets the endpoints' dominant frame). Pinned by
+      `HasGreasedCastProbesParityTest` (oracle = vanilla probes across every cast kind / cached-false-is-a-
+      real-hit / runtime divergence reflected / full toArray byte-identical via json_encode). 308 tests /
+      845 assertions.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
