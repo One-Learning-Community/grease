@@ -1,0 +1,32 @@
+[2026-06-23 13:51:15] workbench.ERROR: Uncaught Exception: The /Users/serpentblade/work/olc/grease/bootstrap/cache directory must be present and writable. in /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php:179
+Stack trace:
+#0 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Foundation/PackageManifest.php(158): Illuminate\Foundation\PackageManifest->write(Array)
+#1 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php(132): Orchestra\Testbench\Foundation\PackageManifest->write(Array)
+#2 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php(108): Illuminate\Foundation\PackageManifest->build()
+#3 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Foundation/PackageManifest.php(103): Illuminate\Foundation\PackageManifest->getManifest()
+#4 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php(90): Orchestra\Testbench\Foundation\PackageManifest->getManifest()
+#5 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php(79): Illuminate\Foundation\PackageManifest->config('aliases')
+#6 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/RegisterFacades.php(26): Illuminate\Foundation\PackageManifest->aliases()
+#7 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Concerns/CreatesApplication.php(532): Illuminate\Foundation\Bootstrap\RegisterFacades->bootstrap(Object(Grease\Container\Application))
+#8 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Concerns/CreatesApplication.php(287): Orchestra\Testbench\Foundation\Application->resolveApplicationBootstrappers(Object(Grease\Container\Application))
+#9 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Foundation/Application.php(198): Orchestra\Testbench\Foundation\Application->createApplication()
+#10 Command line code(17): Orchestra\Testbench\Foundation\Application::create('/Users/serpentb...')
+#11 {main}
+  thrown {"exception":"[object] (Symfony\\Component\\ErrorHandler\\Error\\FatalError(code: 0): Uncaught Exception: The /Users/serpentblade/work/olc/grease/bootstrap/cache directory must be present and writable. in /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php:179
+Stack trace:
+#0 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Foundation/PackageManifest.php(158): Illuminate\\Foundation\\PackageManifest->write(Array)
+#1 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php(132): Orchestra\\Testbench\\Foundation\\PackageManifest->write(Array)
+#2 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php(108): Illuminate\\Foundation\\PackageManifest->build()
+#3 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Foundation/PackageManifest.php(103): Illuminate\\Foundation\\PackageManifest->getManifest()
+#4 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php(90): Orchestra\\Testbench\\Foundation\\PackageManifest->getManifest()
+#5 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php(79): Illuminate\\Foundation\\PackageManifest->config('aliases')
+#6 /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/RegisterFacades.php(26): Illuminate\\Foundation\\PackageManifest->aliases()
+#7 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Concerns/CreatesApplication.php(532): Illuminate\\Foundation\\Bootstrap\\RegisterFacades->bootstrap(Object(Grease\\Container\\Application))
+#8 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Concerns/CreatesApplication.php(287): Orchestra\\Testbench\\Foundation\\Application->resolveApplicationBootstrappers(Object(Grease\\Container\\Application))
+#9 /Users/serpentblade/work/olc/grease/vendor/orchestra/testbench-core/src/Foundation/Application.php(198): Orchestra\\Testbench\\Foundation\\Application->createApplication()
+#10 Command line code(17): Orchestra\\Testbench\\Foundation\\Application::create('/Users/serpentb...')
+#11 {main}
+  thrown at /Users/serpentblade/work/olc/grease/vendor/laravel/framework/src/Illuminate/Foundation/PackageManifest.php:179)
+[stacktrace]
+#0 {main}
+"} 

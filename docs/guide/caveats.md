@@ -67,6 +67,26 @@ byte-identity, it hands the work back to the framework:
 
 All of the above produce identical output; they simply don't get the fast path.
 
+## The foundation tiers (container & request)
+
+These two are a *different axis* from the model traits, with their own opt-in (an
+application-file edit, not a trait) — see [The Container](/guide/container) and
+[The Request](/guide/request). Their narrowing is minimal:
+
+- **Container** — none beyond the opt-in itself. The blueprint caches reflection, not
+  resolution, so contextual bindings, `$with` overrides, and late rebinds all stay live;
+  the resolved object graph is asserted byte-identical to vanilla.
+- **Request** — exactly one carve-out: **direct mutation of an input-source bag** after the
+  first input read — `$request->query->add(...)`, `$request->request->set(...)`,
+  `$request->json()->set(...)`. Use the Laravel-level mutators (`merge()`,
+  `$request['key'] = …`) instead; the memo tracks those, and the lifecycle paths
+  (`clone`/`duplicate`, `initialize`, `setMethod`) too. Mutating bags *outside* the input
+  surface is fully safe — including `$request->attributes->set(...)`, the common middleware
+  pattern, and `cookies`.
+
+Both are opt-in independently of everything else. Not confident? Don't take them — the
+model, event, and Blade tiers all work without them.
+
 ## Want zero cast caveats at all?
 
 Use the tiers à la carte and skip the cast tier. You keep the hydration and metadata

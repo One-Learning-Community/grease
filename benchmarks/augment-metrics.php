@@ -10,10 +10,10 @@
  * authoritative micro-benchmark (the same `composer bench` runs), not a parallel
  * re-implementation that could drift. We just read its results.
  *
- *   php benchmarks/augment-metrics.php <benchmarks.json> <blade.json> <phpbench-dump.xml>
+ *   php benchmarks/augment-metrics.php <benchmarks.json> <blade.json> <phpbench-dump.xml> [stack.json]
  */
 
-[$self, $mainPath, $bladePath, $xmlPath] = array_pad($argv, 4, null);
+[$self, $mainPath, $bladePath, $xmlPath, $stackPath] = array_pad($argv, 5, null);
 
 if (! $mainPath || ! is_file($mainPath)) {
     fwrite(STDERR, "usage: php augment-metrics.php <benchmarks.json> <blade.json> <phpbench-dump.xml>\n");
@@ -100,11 +100,19 @@ if ($xmlPath && is_file($xmlPath)) {
     }
 }
 
+// --- Cumulative-stack pipeline (the matrix the StackTable renders) ---------------
+if ($stackPath && is_file($stackPath)) {
+    $stack = json_decode(file_get_contents($stackPath), true);
+    if (! empty($stack['routes']) && ! empty($stack['levels'])) {
+        $doc['stack'] = $stack;
+    }
+}
+
 $json = json_encode($doc, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n";
 file_put_contents($mainPath, $json);
 
 $counts = array_map(fn ($k) => count($doc[$k] ?? []), ['macro', 'blade', 'perOp', 'events']);
 fwrite(STDERR, sprintf(
-    "merged → %s (macro %d, blade %d, perOp %d, events %d)\n",
-    $mainPath, ...$counts,
+    "merged → %s (macro %d, blade %d, perOp %d, events %d, stack %s)\n",
+    $mainPath, ...$counts, ...[isset($doc['stack']) ? count($doc['stack']['routes']).' routes' : 'none'],
 ));

@@ -6,6 +6,44 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-23
+
+Grease opens a **new axis** beyond the model and view: the per-request *foundation* — the
+application container and the HTTP request. Two opt-in, byte-/behaviour-identical tiers
+join the bundle, and a flagship cumulative-stack benchmark shows every tier compounding on
+a real request through the kernel (JSON + Blade) — the full mixed page-load suite runs
+**~−47%** end-to-end for **~+2%** retained memory. The parity suite grows to **400 tests /
+1066 assertions**. Honest throughout: the foundation tiers' eye-catching per-op wins
+(container −38.8%/resolve, request −41%/request) are *thin slices* of a full request, so
+each moves an endpoint a few percent — compounding tiers, not standalone headlines.
+
+### Added
+
+- **The foundation axis — two new tiers beyond the model trait**, each opt-in,
+  byte-/behaviour-identical, targeting the per-request hot paths rather than the model:
+  - **`Grease\Container\Container` / `Grease\Container\Application`** — a constructor
+    *blueprint*: vanilla `Container::build()` rebuilds class-pure reflection
+    (`ReflectionClass`/`getConstructor`/`getParameters` + per-parameter class-name and
+    attribute walks) on every transient resolve; the blueprint freezes that per concrete
+    and replays it, caching reflection — never resolution, so contextual bindings, `$with`
+    overrides, and late rebinds stay live. **−38.8% per resolve** (Linux); end-to-end a
+    compounding tier (~−5% boot, −5.4→−7.9% dispatch — resolution is a thin slice of a
+    request, and the whole story under Octane). Opt in with a one-line `bootstrap/app.php`
+    swap (the container builds itself before any provider runs). Parity: `BlueprintParityTest`
+    + a full-boot Testbench parity test.
+  - **`Grease\Http\Request`** — per-instance input memoization: vanilla `input()`/`all()`
+    rebuild the merged input map on every call (and `__get`/`has`/`only`/`except`/`filled`
+    all re-funnel through them); memoize the base arrays + `isJson()`, invalidating on every
+    mutation — value mutators and the lifecycle paths (`clone`/`duplicate`, `initialize`,
+    `setMethod`). **−41% per request** (Linux). One carve-out: direct input-source-bag
+    mutation; `attributes`/`cookies` mutation is safe. Opt in with
+    `Grease\Http\Request::capture()` in `public/index.php`.
+- **Cumulative-stack pipeline benchmark** (`benchmarks/stack_pipeline.php`,
+  `StackPipelineBench`, `StackPipelineParityTest`) — a real request through the kernel
+  (four query shapes × JSON + Blade) measured with each tier layered in least→riskiest.
+  Full page-load suite **−47%** (Linux); retained memory **+2.3%** for all six tiers
+  combined. Parity suite grows to **400 tests / 1066 assertions**.
+
 ## [0.3.0] - 2026-06-23
 
 The performance surface roughly doubles. The Eloquent model trait grows from four tiers
