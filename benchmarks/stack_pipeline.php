@@ -17,7 +17,7 @@
  *
  * Shares all fixtures (models, schema, seed, routes, views) with the CI-guarded
  * tests/Pipeline/StackPipelineParityTest and benchmarks/Bench/StackPipelineBench, via
- * {@see \Grease\Tests\Fixtures\Pipeline\PipelineHarness}.
+ * {@see PipelineHarness}.
  *
  * Each level runs in its own subprocess (isolation + a clean per-level memory reading).
  *
@@ -26,6 +26,7 @@
 
 require __DIR__.'/../vendor/autoload.php';
 
+use Grease\Tests\Fixtures\Pipeline\PipelineHarness;
 use Grease\Tests\Fixtures\Pipeline\PipelineHarness as H;
 
 // --- Arm: boot at one level, parity-probe + time every route, report memory. ------
@@ -154,7 +155,7 @@ if ($emitJson) {
 
     if ($jsonOut !== null) {
         file_put_contents($jsonOut, json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
-        fwrite(STDERR, "wrote $jsonOut (stack: ".count($routes)." routes × ".count($levelNames)." levels)\n");
+        fwrite(STDERR, "wrote $jsonOut (stack: ".count($routes).' routes × '.count($levelNames)." levels)\n");
     } else {
         echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n";
     }

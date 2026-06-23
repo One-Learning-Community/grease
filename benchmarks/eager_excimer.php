@@ -111,7 +111,7 @@ $profiler->stop();
 
 $log = $profiler->getLog();
 echo "Excimer: {$runs}x GUser::with('posts')->get()  ($nUsers users x $nPosts posts = ".($nUsers * $nPosts)." children)\n";
-echo "samples: ".count($log)."\n".str_repeat('-', 72)."\n";
+echo 'samples: '.count($log)."\n".str_repeat('-', 72)."\n";
 
 $agg = $log->aggregateByFunction();
 uasort($agg, static fn ($a, $b) => $b['self'] - $a['self']);

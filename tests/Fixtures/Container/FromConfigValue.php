@@ -14,9 +14,7 @@ use ReflectionParameter;
 #[Attribute(Attribute::TARGET_PARAMETER)]
 class FromConfigValue implements ContextualAttribute
 {
-    public function __construct(public string $key)
-    {
-    }
+    public function __construct(public string $key) {}
 
     public function resolve(self $attribute, Container $container, ReflectionParameter $parameter): string
     {

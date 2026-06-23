@@ -5,8 +5,8 @@ namespace Grease\Tests;
 use Grease\View\Compiler;
 use Grease\View\Props;
 use Illuminate\Filesystem\Filesystem;
-use Illuminate\View\ComponentAttributeBag;
 use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\ComponentAttributeBag;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 

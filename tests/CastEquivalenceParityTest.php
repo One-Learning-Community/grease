@@ -124,7 +124,7 @@ class CastEquivalenceParityTest extends TestCase
         $this->assertSame($vanilla->isDirty('updated_at'), $greased->isDirty('updated_at'));
     }
 
-    public function test_getCastType_override_is_honored_on_greased_models(): void
+    public function test_get_cast_type_override_is_honored_on_greased_models(): void
     {
         // Grease resolves the cast type via getCastType(), so an override IS
         // honored — unlike the maximally-narrowed design. (The actual narrowing

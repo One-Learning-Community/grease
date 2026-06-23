@@ -3,8 +3,8 @@
 namespace Grease\Tests;
 
 use Grease\View\ComponentAttributeBag as GreasedBag;
-use Illuminate\View\ComponentAttributeBag as VanillaBag;
 use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\ComponentAttributeBag as VanillaBag;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -19,7 +19,7 @@ class ComponentAttributeBagMergeParityTest extends TestCase
 {
     /**
      * @param  array<string, mixed>  $attributes  the live (incoming) attributes
-     * @param  array<string, mixed>  $defaults    the merge() default map
+     * @param  array<string, mixed>  $defaults  the merge() default map
      */
     #[DataProvider('scenarios')]
     public function test_greased_merge_matches_vanilla(array $attributes, array $defaults, bool $escape = true): void

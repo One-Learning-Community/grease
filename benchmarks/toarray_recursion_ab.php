@@ -22,6 +22,7 @@ use Grease\Bench\Support\BootsEloquent;
 use Grease\Concerns\HasGrease;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Carbon;
 
 $rows = (int) ($argv[1] ?? 100);
 $iters = (int) ($argv[2] ?? 6000);
@@ -42,21 +43,30 @@ $capsule->schema()->create('users', function (Blueprint $t) {
 class TRVanilla extends Model
 {
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
 }
 // A: HasGrease but toArray() forced back to vanilla (class method shadows the trait's).
 class TRA extends Model
 {
     use HasGrease;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
-    public function toArray() { return parent::toArray(); }
+
+    public function toArray()
+    {
+        return parent::toArray();
+    }
 }
 // B: HasGrease (short-circuit live).
 class TRB extends Model
 {
     use HasGrease;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
 }
 
@@ -69,7 +79,7 @@ foreach (array_chunk($seed, 500) as $c) {
     $capsule->table('users')->insert($c);
 }
 
-\Illuminate\Support\Carbon::setTestNow('2026-01-01 12:00:00');
+Carbon::setTestNow('2026-01-01 12:00:00');
 
 $oracle = TRVanilla::query()->limit($rows)->get()->toArray();
 $a = TRA::query()->limit($rows)->get()->toArray();
@@ -88,6 +98,7 @@ $bench = function (string $class) use ($rows, $iters) {
     for ($i = 0; $i < $iters; $i++) {
         $class::query()->limit($rows)->get()->toArray();
     }
+
     return (hrtime(true) - $t0) / 1e9;
 };
 
@@ -103,4 +114,4 @@ for ($r = 0; $r < $repeats; $r++) {
 }
 printf("\nshort-circuit vs vanilla-toArray:   %+.1f%%   (mean of %d repeats)\n", ($tb - $ta) / $ta * 100, $repeats);
 
-\Illuminate\Support\Carbon::setTestNow();
+Carbon::setTestNow();

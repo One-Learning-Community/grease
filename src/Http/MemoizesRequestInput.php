@@ -2,12 +2,13 @@
 
 namespace Grease\Http;
 
+use Illuminate\Http\Concerns\InteractsWithInput;
 use Illuminate\Support\Arr;
 
 /**
  * Grease HTTP tier — per-instance input memoization.
  *
- * Vanilla {@see \Illuminate\Http\Concerns\InteractsWithInput::input()} rebuilds the
+ * Vanilla {@see InteractsWithInput::input()} rebuilds the
  * merged input map — `$this->getInputSource()->all() + $this->query->all()` — on *every*
  * call, and `all()` wraps that in a fresh `array_replace_recursive(..., allFiles())` every
  * call. Nearly every accessor funnels through them: `__get`, `offsetGet`, `offsetExists`,

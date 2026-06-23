@@ -3,6 +3,7 @@
 namespace Grease\Tests\Http;
 
 use Grease\Http\Request as GreasedRequest;
+use Illuminate\Http\Request;
 use Illuminate\Http\Request as VanillaRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -11,7 +12,7 @@ use PHPUnit\Framework\TestCase;
  * The input-memoization contract: a greased request must answer `input()`/`all()`/
  * `has()`/`only()`/`__get`/`offsetGet`/`isJson()` (and everything funneling through them)
  * byte-for-byte like vanilla — including after the Laravel-level mutators that invalidate
- * the memo. Oracle = vanilla {@see \Illuminate\Http\Request}.
+ * the memo. Oracle = vanilla {@see Request}.
  */
 class RequestInputParityTest extends TestCase
 {
@@ -39,7 +40,7 @@ class RequestInputParityTest extends TestCase
     /**
      * Read-only accessor probes. Each returns a canonical, comparable result.
      *
-     * @return array<string, callable(\Illuminate\Http\Request): mixed>
+     * @return array<string, callable(Request): mixed>
      */
     private static function probes(): array
     {
@@ -89,7 +90,7 @@ class RequestInputParityTest extends TestCase
      * The memo must invalidate: read (warms the memo), mutate, read again — the second
      * read must reflect the mutation, identically to vanilla.
      *
-     * @return iterable<string, array{0: callable(\Illuminate\Http\Request): mixed}>
+     * @return iterable<string, array{0: callable(Request): mixed}>
      */
     public static function mutations(): iterable
     {

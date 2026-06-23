@@ -11,7 +11,6 @@
  * The canonical, always-current table lives in the docs (rendered from the same JSON);
  * this keeps the README's one-line summary honest between doc visits.
  */
-
 $root = dirname(__DIR__);
 $jsonPath = "$root/docs/.vitepress/data/benchmarks.json";
 $readmePath = "$root/README.md";
@@ -60,4 +59,4 @@ if ($patched === $readme) {
 }
 
 file_put_contents($readmePath, $patched);
-fwrite(STDERR, "updated README end-to-end line: ".implode(', ', $parts)."\n");
+fwrite(STDERR, 'updated README end-to-end line: '.implode(', ', $parts)."\n");

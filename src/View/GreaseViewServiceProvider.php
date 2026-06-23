@@ -2,9 +2,9 @@
 
 namespace Grease\View;
 
+use Illuminate\Support\ServiceProvider;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Factory as BaseFactory;
-use Illuminate\Support\ServiceProvider;
 
 /**
  * Opt into the greased Blade tier app-wide. Register this provider (it is deliberately

@@ -4,6 +4,7 @@ namespace Grease\Tests\Config;
 
 use Grease\Config\ConfigCacheCommand;
 use Grease\Config\Repository as GreasedRepository;
+use Illuminate\Config\Repository;
 use Illuminate\Config\Repository as VanillaRepository;
 use Illuminate\Support\Arr;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -13,7 +14,7 @@ use PHPUnit\Framework\TestCase;
  * The config-memo contract: a greased repository must answer `get()` (and everything that
  * routes through it) byte-for-byte like vanilla — across nested keys, stored nulls, missing
  * keys with per-call defaults, closure defaults, getMany, and after every write path that
- * invalidates the memo. Oracle = vanilla {@see \Illuminate\Config\Repository}.
+ * invalidates the memo. Oracle = vanilla {@see Repository}.
  */
 class ConfigRepositoryParityTest extends TestCase
 {
@@ -36,7 +37,7 @@ class ConfigRepositoryParityTest extends TestCase
     }
 
     /**
-     * @return array<string, callable(\Illuminate\Config\Repository): mixed>
+     * @return array<string, callable(Repository): mixed>
      */
     private static function probes(): array
     {
@@ -115,7 +116,7 @@ class ConfigRepositoryParityTest extends TestCase
      * Write paths that must invalidate the memo. Each warms the memo, mutates, re-reads —
      * greased must match vanilla. prepend/push/offsetSet/offsetUnset all funnel through set().
      *
-     * @return iterable<string, array{0: callable(\Illuminate\Config\Repository): mixed}>
+     * @return iterable<string, array{0: callable(Repository): mixed}>
      */
     public static function mutations(): iterable
     {
@@ -252,7 +253,7 @@ class ConfigRepositoryParityTest extends TestCase
      * path that descends INTO a scalar (must miss), numeric segments, and empty-array values.
      * Oracle = vanilla; each read twice so the memo path is exercised too.
      *
-     * @return iterable<string, array{0: callable(\Illuminate\Config\Repository): mixed}>
+     * @return iterable<string, array{0: callable(Repository): mixed}>
      */
     public static function nestedProbes(): iterable
     {

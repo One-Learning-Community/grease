@@ -2,6 +2,8 @@
 
 namespace Grease;
 
+use Illuminate\Database\Eloquent\Model;
+
 /**
  * A flyweight cast object built from closures.
  *
@@ -19,19 +21,19 @@ namespace Grease;
  */
 class ClosureCast
 {
-    /** @var callable(\Illuminate\Database\Eloquent\Model, string, TRawValue, array<string, mixed>): TValue */
+    /** @var callable(Model, string, TRawValue, array<string, mixed>): TValue */
     protected $get;
 
-    /** @var callable(\Illuminate\Database\Eloquent\Model, string, TValue, array<string, mixed>): TRawValue */
+    /** @var callable(Model, string, TValue, array<string, mixed>): TRawValue */
     protected $set;
 
-    /** @var callable(\Illuminate\Database\Eloquent\Model, string, TValue, TValue): bool */
+    /** @var callable(Model, string, TValue, TValue): bool */
     protected $comparator;
 
     /**
-     * @param  callable(\Illuminate\Database\Eloquent\Model, string, TRawValue, array<string, mixed>): TValue  $get
-     * @param  (callable(\Illuminate\Database\Eloquent\Model, string, TValue, array<string, mixed>): TRawValue)|null  $set
-     * @param  (callable(\Illuminate\Database\Eloquent\Model, string, TValue, TValue): bool)|null  $comparator
+     * @param  callable(Model, string, TRawValue, array<string, mixed>): TValue  $get
+     * @param  (callable(Model, string, TValue, array<string, mixed>): TRawValue)|null  $set
+     * @param  (callable(Model, string, TValue, TValue): bool)|null  $comparator
      */
     public function __construct(
         callable $get,
@@ -48,7 +50,7 @@ class ClosureCast
     /**
      * Transform the attribute from its stored value.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
+     * @param  Model  $model
      * @param  TRawValue  $value
      * @param  array<string, mixed>  $attributes
      * @return TValue
@@ -65,7 +67,7 @@ class ClosureCast
     /**
      * Transform the attribute to its stored value.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
+     * @param  Model  $model
      * @param  TValue  $value
      * @param  array<string, mixed>  $attributes
      * @return TRawValue
@@ -78,7 +80,7 @@ class ClosureCast
     /**
      * Determine if two values are equivalent for dirty-checking.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
+     * @param  Model  $model
      * @param  TValue  $first
      * @param  TValue  $second
      */

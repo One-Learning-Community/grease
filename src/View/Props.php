@@ -15,7 +15,7 @@ use Illuminate\View\ComponentAttributeBag;
  * the defaults); and it snapshots the entire scope with `get_defined_vars()` to unset
  * attribute-named locals.
  *
- * {@see \Grease\View\Compiler::compileProps()} evaluates the declaration once and calls
+ * {@see Compiler::compileProps()} evaluates the declaration once and calls
  * {@see mergeAttributes()}, which does the partition, defaults and surviving bag — and
  * returns the prop *candidates*, the `attributes` bag, and the surviving keys. The compiler
  * binds the candidates with a tight `$$key = $$key ?? $value` loop (deferring to any existing

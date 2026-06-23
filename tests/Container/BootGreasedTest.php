@@ -2,15 +2,17 @@
 
 namespace Grease\Tests\Container;
 
+use Grease\Container\Application;
 use Grease\Container\Application as GreasedApplication;
+use Grease\Container\ResolvesWithGreaseBlueprint;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
 use ReflectionProperty;
 
 /**
  * Greased arm: a fully-configured Testbench application built on
- * {@see \Grease\Container\Application}. Boot resolves hundreds of providers/services and
+ * {@see Application}. Boot resolves hundreds of providers/services and
  * dispatch resolves the controller's constructor + method dependencies — all through the
- * greased constructor-blueprint {@see \Grease\Container\ResolvesWithGreaseBlueprint}. It
+ * greased constructor-blueprint {@see ResolvesWithGreaseBlueprint}. It
  * must boot, serve, and return a response byte-identical to {@see BootVanillaTest}.
  */
 class BootGreasedTest extends BootParityTestCase

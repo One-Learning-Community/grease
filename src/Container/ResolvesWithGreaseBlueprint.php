@@ -3,6 +3,7 @@
 namespace Grease\Container;
 
 use Closure;
+use Illuminate\Container\Container;
 use Illuminate\Container\Util;
 use Illuminate\Contracts\Container\SelfBuilding;
 use ReflectionClass;
@@ -11,7 +12,7 @@ use ReflectionException;
 /**
  * Grease container tier — the "constructor blueprint".
  *
- * Vanilla {@see \Illuminate\Container\Container::build()} rebuilds, on *every* resolve
+ * Vanilla {@see Container::build()} rebuilds, on *every* resolve
  * of a non-singleton, work that is a pure function of the class name: a fresh
  * `ReflectionClass`, `getConstructor()`, `getParameters()`, and per-parameter
  * `Util::getParameterClassName()` + attribute walks. None of it changes for the life of
@@ -35,7 +36,7 @@ trait ResolvesWithGreaseBlueprint
      * Per-concrete compiled build plans. `null` marks a class that must defer to
      * `parent::build()` (not instantiable, self-building, or non-existent).
      *
-     * @var array<string, array{0: \ReflectionClass, 1: array<int, \ReflectionAttribute>, 2: ?array<int, array>}|null>
+     * @var array<string, array{0: ReflectionClass, 1: array<int, \ReflectionAttribute>, 2: ?array<int, array>}|null>
      */
     protected array $greaseBuildPlans = [];
 
@@ -95,7 +96,7 @@ trait ResolvesWithGreaseBlueprint
      * if the class can't take the fast path and must defer to `parent::build()`.
      *
      * @param  string  $concrete
-     * @return array{0: \ReflectionClass, 1: array<int, \ReflectionAttribute>, 2: ?array<int, array>}|null
+     * @return array{0: ReflectionClass, 1: array<int, \ReflectionAttribute>, 2: ?array<int, array>}|null
      */
     protected function compileGreaseBuildPlan($concrete)
     {
@@ -138,7 +139,7 @@ trait ResolvesWithGreaseBlueprint
 
     /**
      * Replay the frozen dependency plan. Identical control flow to vanilla
-     * {@see \Illuminate\Container\Container::resolveDependencies()} — only the
+     * {@see Container::resolveDependencies()} — only the
      * class-pure reflection lookups are read from the plan instead of recomputed.
      *
      * @param  array<int, array>  $params

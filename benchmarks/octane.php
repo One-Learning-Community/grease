@@ -15,7 +15,7 @@
  * how much.
  *
  * The measurement reuses the exact, parity-proven cumulative-stack fixtures
- * ({@see \Grease\Tests\Fixtures\Pipeline\PipelineHarness} — the same models, schema, seed,
+ * ({@see PipelineHarness} — the same models, schema, seed,
  * routes and views the CI parity test and StackPipelineBench run), in two arms:
  *
  *   --warm  boot once, warm hard, time each route warm        → Octane steady-state cost
@@ -42,6 +42,7 @@
 
 require __DIR__.'/../vendor/autoload.php';
 
+use Grease\Tests\Fixtures\Pipeline\PipelineHarness;
 use Grease\Tests\Fixtures\Pipeline\PipelineHarness as H;
 
 // --- WARM arm: the persistent-worker steady state. -------------------------------
@@ -54,7 +55,7 @@ if (($argv[1] ?? null) === '--warm') {
     $t0 = hrtime(true);
     $app = H::bootLevel($level);
     $bootUs = (hrtime(true) - $t0) / 1e3; // NB: includes the test DB seed — constant across
-                                          // levels, so the boot *delta* stays honest.
+    // levels, so the boot *delta* stays honest.
 
     $results = H::parityProbe($app, $level); // {route: {status, hash}}
 

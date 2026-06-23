@@ -9,7 +9,7 @@ use Illuminate\View\ComponentAttributeBag as BaseComponentAttributeBag;
 /**
  * A drop-in faster attribute bag — overrides the one hot method, `merge()`, that every
  * component with an `@props` block calls on each render (`$attributes->merge([...])`).
- * {@see \Grease\View\Props::mergeAttributes()} hands the component its surviving
+ * {@see Props::mergeAttributes()} hands the component its surviving
  * attributes as one of these instead of a vanilla bag, so the template's merge runs the
  * tight path; `merge()` returns `new static`, so the type stays greased down any chain.
  *

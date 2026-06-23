@@ -12,7 +12,6 @@
  *
  *   php benchmarks/augment-metrics.php <benchmarks.json> <blade.json> <phpbench-dump.xml> [stack.json]
  */
-
 [$self, $mainPath, $bladePath, $xmlPath, $stackPath] = array_pad($argv, 5, null);
 
 if (! $mainPath || ! is_file($mainPath)) {

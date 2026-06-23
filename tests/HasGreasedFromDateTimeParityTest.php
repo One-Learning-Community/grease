@@ -3,11 +3,12 @@
 namespace Grease\Tests;
 
 use Grease\Concerns\HasGrease;
+use Grease\Concerns\HasGreasedSerialization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * {@see \Grease\Concerns\HasGreasedSerialization::fromDateTime()} skips the parse-and-reformat
+ * {@see HasGreasedSerialization::fromDateTime()} skips the parse-and-reformat
  * round-trip when the value is already a storage-format string under the standard driver format
  * — the write-path twin of the date serialization tier. The contract is byte-for-byte identical
  * to vanilla `fromDateTime()` for every input (storage string, Carbon, null, off-format string,
@@ -99,6 +100,7 @@ class HasGreasedFromDateTimeParityTest extends TestCase
 class VanillaFDT extends Model
 {
     protected $table = 'fdt';
+
     protected $casts = ['score' => 'decimal:2', 'created_at' => 'datetime', 'updated_at' => 'datetime'];
 }
 
@@ -107,12 +109,14 @@ class GreasedFDT extends Model
     use HasGrease;
 
     protected $table = 'fdt';
+
     protected $casts = ['score' => 'decimal:2', 'created_at' => 'datetime', 'updated_at' => 'datetime'];
 }
 
 class VanillaFDTCustomFormat extends Model
 {
     protected $table = 'fdt';
+
     protected $dateFormat = 'U'; // unix timestamp — not the standard driver format
 }
 
@@ -121,5 +125,6 @@ class GreasedFDTCustomFormat extends Model
     use HasGrease;
 
     protected $table = 'fdt';
+
     protected $dateFormat = 'U';
 }

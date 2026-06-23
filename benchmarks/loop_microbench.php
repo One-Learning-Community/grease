@@ -43,10 +43,14 @@ final class VanillaLoops
         if ($last = ($this->loopsStack ? end($this->loopsStack) : null)) {
             return (object) $last;
         }
+
         return null;
     }
 
-    public function popLoop(): void { array_pop($this->loopsStack); }
+    public function popLoop(): void
+    {
+        array_pop($this->loopsStack);
+    }
 }
 
 // --- (B) direct-assign increment, fresh object cast (byte-identical) ---
@@ -87,16 +91,21 @@ final class SafeLoops
         if ($last = ($this->loopsStack ? end($this->loopsStack) : null)) {
             return (object) $last;
         }
+
         return null;
     }
 
-    public function popLoop(): void { array_pop($this->loopsStack); }
+    public function popLoop(): void
+    {
+        array_pop($this->loopsStack);
+    }
 }
 
 // --- (C) reuse one mutable stdClass per level (UNSAFE: aliases across iterations) ---
 final class ReuseLoops
 {
     public array $loopsStack = [];
+
     private array $objs = [];
 
     public function addLoop($data): void
@@ -104,9 +113,16 @@ final class ReuseLoops
         $length = is_countable($data) ? count($data) : null;
         $parent = $this->objs ? end($this->objs) : null;
         $o = new stdClass;
-        $o->iteration = 0; $o->index = 0; $o->remaining = $length ?? null; $o->count = $length;
-        $o->first = true; $o->last = isset($length) ? $length == 1 : null;
-        $o->odd = false; $o->even = true; $o->depth = count($this->objs) + 1; $o->parent = $parent;
+        $o->iteration = 0;
+        $o->index = 0;
+        $o->remaining = $length ?? null;
+        $o->count = $length;
+        $o->first = true;
+        $o->last = isset($length) ? $length == 1 : null;
+        $o->odd = false;
+        $o->even = true;
+        $o->depth = count($this->objs) + 1;
+        $o->parent = $parent;
         $this->objs[] = $o;
     }
 
@@ -114,13 +130,26 @@ final class ReuseLoops
     {
         $o = end($this->objs);
         $it = $o->iteration;
-        $o->iteration = $it + 1; $o->index = $it; $o->first = $it == 0;
-        $o->odd = ! $o->odd; $o->even = ! $o->even;
-        if ($o->count !== null) { $o->remaining -= 1; $o->last = $it == $o->count - 1; }
+        $o->iteration = $it + 1;
+        $o->index = $it;
+        $o->first = $it == 0;
+        $o->odd = ! $o->odd;
+        $o->even = ! $o->even;
+        if ($o->count !== null) {
+            $o->remaining -= 1;
+            $o->last = $it == $o->count - 1;
+        }
     }
 
-    public function getLastLoop(): ?object { return $this->objs ? end($this->objs) : null; }
-    public function popLoop(): void { array_pop($this->objs); }
+    public function getLastLoop(): ?object
+    {
+        return $this->objs ? end($this->objs) : null;
+    }
+
+    public function popLoop(): void
+    {
+        array_pop($this->objs);
+    }
 }
 
 // Parity: run one loop both ways, snapshot $loop each iteration, compare.
@@ -134,6 +163,7 @@ function run(object $env, array $data): array
         $snaps[] = [$loop->index, $loop->iteration, $loop->first, $loop->last, $loop->remaining, $loop->odd, $loop->even];
     }
     $env->popLoop();
+
     return $snaps;
 }
 
@@ -167,6 +197,7 @@ $bench = function (string $label, string $class) use ($ROWS, $N) {
     }
     $dt = (hrtime(true) - $t0) / 1e9;
     printf("  %-13s %6.3f s   (%.1f M iters/s)   sink=%d\n", $label, $dt, ($N * $ROWS) / $dt / 1e6, $sink);
+
     return $dt;
 };
 

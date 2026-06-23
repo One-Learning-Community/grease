@@ -13,6 +13,5 @@ class Ctrl
         public LoggerContract $logger,
         public Dep3 $c,
         public int $n = 5,
-    ) {
-    }
+    ) {}
 }
