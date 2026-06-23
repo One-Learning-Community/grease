@@ -119,29 +119,30 @@ asserted identical):
 
 | Variant | What it stresses | Δ |
 | --- | --- | :---: |
-| simple | initials + one attribute merge | **−38.9%** |
-| rich | 5 props, a `@php` block, conditionals, slots | **−29.9%** |
-| app page | class components, slots, `@include`/`@each`, a view composer | **−21.4%** |
-| data table | nested `@foreach`, heavy `$loop` use | **−27.8%** |
-| layout | `@extends` / `@section` / `@yield` / `@push` | **−19.4%** |
-| asset stacks | `@push`/`@prepend` per row into a `@stack` | **−17.7%** |
-| full page | extends a layout, 5 sections, a 100-row `@foreach` table, components | **−9.3%** |
+| simple | initials + one attribute merge | <Delta k="page-simple" :digits="1" /> |
+| rich | 5 props, a `@php` block, conditionals, slots | <Delta k="page-rich" :digits="1" /> |
+| app page | class components, slots, `@include`/`@each`, a view composer | <Delta k="page-app" :digits="1" /> |
+| data table | nested `@foreach`, heavy `$loop` use | <Delta k="page-table" :digits="1" /> |
+| layout | `@extends` / `@section` / `@yield` / `@push` | <Delta k="page-layout" :digits="1" /> |
+| asset stacks | `@push`/`@prepend` per row into a `@stack` | <Delta k="page-stacks" :digits="1" /> |
+| full page | extends a layout, 5 sections, a 100-row `@foreach` table, components | <Delta k="page-full" :digits="1" /> |
 
 The `@foreach` variants (`page-foreach`, `page-rich-foreach`) render Taylor's avatar
-challenge in the *realistic* loop form, and land on the same ~−39% / ~−30% as their `@for`
-counterparts — confirming the tiers compose with zero regression.
+challenge in the *realistic* loop form, and land on the same ~<Delta k="page-foreach" /> /
+~<Delta k="page-rich-foreach" /> as their `@for` counterparts — confirming the tiers compose
+with zero regression.
 
 The **full page** is the most honest single number: a standard page that `@extends` a
 primary layout, fills `head`/`styles`/`scripts`/`footer`/`content` (with a `@parent`
 override), renders a 100-row `@foreach` table, and drops in a few components — every tier
-firing at once. It lands at **−9.3%**, *lower* than any single-axis variant, and that's the
+firing at once. It lands at <Delta k="page-full" :digits="1" />, *lower* than any single-axis variant, and that's the
 truth of the regime: on a realistic page the greasable framework slice is small because
 genuine work dominates. A profile (Excimer) puts ~53% of the render in the compiled
 template bodies (your markup) and ~24% in `e()`/`htmlspecialchars` (escaping ~500 table
 cells) — both genuine, both off-limits. The remaining ~23% is spread thin across the engine
 and Factory, and every greasable piece of it is *already* greased. So the single-axis
-numbers above are what each tier is worth where it dominates; −9.3% is what they compound
-to where they don't.
+numbers above are what each tier is worth where it dominates; <Delta k="page-full" :digits="1" />
+is what they compound to where they don't.
 
 ::: tip The regime insight — which fixture wins on which tier
 The wins split by **what the loop body costs**, and that's worth knowing when you reason

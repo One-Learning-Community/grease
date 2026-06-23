@@ -6,6 +6,37 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-23
+
+A correctness fix to the Blade view tier, and an honest re-measurement of its benchmarks.
+
+### Fixed
+
+- **`@props` now honors a value passed as `@include` data.** The greased `@props` emit
+  bound props with a plain `$$key = $value`, unconditionally overwriting with the declared
+  default — so a value reaching a sub-view via `@include('sub', ['propValue' => 1])` (which
+  `extract()`s `$propValue` into scope *before* the block runs, rather than arriving in a
+  `ComponentAttributeBag`) was discarded and the default rendered instead. Vanilla's emit is
+  scope-aware in two ways the greased one had dropped, both now restored byte-identically:
+  - props bind with `$$key = $$key ?? $candidate`, so an existing scope local wins over the
+    default (the `@include` value), and
+  - locals shadowed by a pass-through attribute are `unset()` (vanilla's `get_defined_vars()`
+    cleanup) — described in the `Props` docstring but never actually emitted.
+
+  `Props::mergeAttributes()` now returns the prop *candidates* (`passed-attribute ?? default`),
+  the surviving attribute bag, and the surviving keys; the compiler finishes the resolution in
+  the template frame. Regression coverage: a new `scopeScenarios` provider pre-seeds scope
+  locals and A/Bs vanilla vs greased — reverting just the bind to the old form fails 3 of the 5.
+
+### Changed
+
+- **Blade benchmark numbers re-measured on Linux** (`benchmarks/docker`) against the corrected
+  emit: **simple −28% / rich −23%** component renders (was −38% / −29.5% through 0.4.0 — those
+  measured the byte-divergent emit above). The now-mandatory scope-cleanup loop is intrinsic to
+  byte-identical parity and accounts for most of the difference on the cheapest components. The
+  live docs JSON (`docs/.vitepress/data/benchmarks.json`) and README are refreshed; the
+  model/event/foundation tiers are unchanged.
+
 ## [0.4.0] - 2026-06-23
 
 Grease opens a **new axis** beyond the model and view: the per-request *foundation* — the
@@ -217,7 +248,9 @@ dirty-check.
 - PHP 8.2+
 - Laravel 12 / 13
 
-[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/One-Learning-Community/grease/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/One-Learning-Community/grease/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/One-Learning-Community/grease/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/One-Learning-Community/grease/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/One-Learning-Community/grease/releases/tag/v0.1.0
