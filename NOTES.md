@@ -748,6 +748,33 @@ Roughly highest-leverage first.
         imaginable to answer a question that's `false` for ~100% of real calls (no model is mid-serialize
         when you serialize it). Exactly Grease's thesis: a dev-ergonomics-first guard, never tuned for the
         hot path where it never fires.
+    - ✅ **SHIPPED: `fromDateTime()` identity short-circuit** (in `HasGreasedSerialization`) — lever (2),
+      the write-path date round-trip, twin of the read-path `serializeDate` elimination. `fromDateTime($v)`
+      = `asDateTime($v)->format(getDateFormat())`, the date's way *into* storage. Its hot caller is
+      `originalIsEquivalent()` on `save()`: for a date column it computes `fromDateTime($attribute) ===
+      fromDateTime($original)`, and — the catch that makes the win bigger than it looks — after
+      `updateTimestamps()` runs `setAttribute('updated_at', $carbon)`, setAttribute *already* stored the
+      timestamp as a string, so **both** operands are storage strings. Vanilla parses both into Carbon and
+      formats both straight back to the identical string (`rawCreateFromFormat` was ~24% of the bulk_update
+      profile, all under `getDirty`). The fast path returns a certified `GREASE_DATE_SHAPE` string as-is.
+      - Certify exactly like the rest of the tier: a per-class probe asserts `fromDateTime($probe) ===
+        $probe`; only a certified class fast-paths, only plain second-precision strings, everything else
+        (Carbon, custom `dateFormat`, off-shape) defers to vanilla. **Plan is a string (`'identity'`/
+        `'defer'`), not a bool** — so the `??=` memo caches an uncertified verdict instead of re-probing
+        every call. (NB: the existing `greaseDateSerializePlan` returns `…|false` and *does* re-probe an
+        uncertified class on every call via `??=` — a latent inefficiency on the slow path only; worth the
+        same string-plan treatment if revisited.) Unlike `serializeDate`, `fromDateTime` always targets
+        the storage format, so identity holds regardless of timezone (parse and format share it).
+      - **Measured:** the Carbon parse frames (`createFromFormatAndTimezone`, `rawCreateFromFormat`,
+        `asDateTime`) drop out of the bulk_update profile; `getDirty` incl 57% → 40%, `originalIsEquivalent`
+        54% → 36%, profiler loop 458× → 661× (+44%). Tier-isolated A/B (`benchmarks/fromdatetime_ab.php`,
+        vanilla-fromDateTime vs fast-path, parity-gated on the `getDirty()` set, mean of 3): **−38.5%** on a
+        150-row get→mutate→save loop. Macro: bulk_update −19.6% → −20.4% — small at the endpoint (it's
+        SQL-write-bound on a real UPDATE), but `fromDateTime` is on **every `save()`'s dirty-check
+        app-wide**, so the model-side win generalizes far beyond this one endpoint. Pinned by
+        `HasGreasedFromDateTimeParityTest` (oracle = vanilla fromDateTime across storage-string/Carbon/null/
+        off-shape inputs / custom-format defers / getDirty integration / unchanged-not-dirty). 317 tests /
+        867 assertions.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green

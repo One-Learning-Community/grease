@@ -82,6 +82,71 @@ trait HasGreasedSerialization
         return parent::toArray();
     }
 
+    /**
+     * Skip the parse-and-reformat round-trip in `fromDateTime()` when the value is already a
+     * storage-format string under the standard driver format.
+     *
+     * `fromDateTime($value)` is `asDateTime($value)->format(getDateFormat())` — the date's way
+     * *into* storage. The hot caller is `originalIsEquivalent()` on `save()`: for a date column
+     * it computes `fromDateTime($attribute) === fromDateTime($original)`, and `$original` is the
+     * raw stored string (`'2026-01-01 00:00:00'`). So `fromDateTime($original)` *parses that
+     * string into Carbon and formats it straight back to the identical string* — an expensive
+     * identity (`rawCreateFromFormat` is ~24% of the `bulk_update` profile, all under
+     * `getDirty`). Unlike `serializeDate`, `fromDateTime` always targets the storage format, so
+     * a storage-format string round-trips to itself whenever the format is standard — regardless
+     * of timezone (parse and format share it).
+     *
+     * Same narrowing as the rest of the tier: a per-class probe certifies
+     * `fromDateTime($probe) === $probe` against representative storage strings; only a certified
+     * class fast-paths, and only a plain second-precision string (`GREASE_DATE_SHAPE`) — a Carbon
+     * (the fresh `updated_at` side of the comparison), a custom `dateFormat`, or any value the
+     * probe doesn't certify defers to the exact vanilla parse. The plan is a string
+     * (`'identity'`/`'defer'`), not a bool, so the `??=` memo caches a non-certified verdict
+     * instead of re-probing every call.
+     */
+    public function fromDateTime($value)
+    {
+        if (is_string($value)
+            && $this->greaseFromDateTimePlan() === 'identity'
+            && preg_match(self::GREASE_DATE_SHAPE, $value) === 1) {
+            return $value;
+        }
+
+        return parent::fromDateTime($value);
+    }
+
+    /**
+     * 'identity' when storage-format strings round-trip through `fromDateTime()` unchanged for
+     * this class (standard driver format), else 'defer'. Keyed by timezone + connection, like
+     * the serialize plan. A string (never null/false) so the `??=` memo is a true one-shot.
+     */
+    protected function greaseFromDateTimePlan(): string
+    {
+        $tz = date_default_timezone_get();
+        $conn = $this->getConnectionName() ?? '@default';
+
+        return static::$greaseBlueprint[static::class]['fromDateTime'][$tz][$conn]
+            ??= $this->greaseBuildFromDateTimePlan();
+    }
+
+    /**
+     * Certify the `fromDateTime()` identity fast path by probing the real composition.
+     */
+    protected function greaseBuildFromDateTimePlan(): string
+    {
+        if ($this->getDateFormat() !== 'Y-m-d H:i:s') {
+            return 'defer';
+        }
+
+        foreach (self::GREASE_DATE_PROBES as $probe) {
+            if (parent::fromDateTime($probe) !== $probe) {
+                return 'defer';
+            }
+        }
+
+        return 'identity';
+    }
+
     protected function addDateAttributesToArray(array $attributes)
     {
         $plan = $this->greaseDateSerializePlan();
