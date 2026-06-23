@@ -17,6 +17,7 @@ namespace Grease\Concerns;
  *   - HasGreasedHydration       (construct / hydration)
  *   - HasGreasedAttributes      (cast/date/mutator metadata memoization)
  *   - HasGreasedClassAttributes (class-attribute resolution: #[Table]/#[Fillable]/…)
+ *   - HasGreasedInitializers    (per-class freeze of the guards/hides/timestamps/touches booters)
  *   - HasGreasedCasts           (narrowed flyweight cast dispatch — see its caveat)
  *   - HasGreasedSerialization   (date serialization round-trip elimination)
  *
@@ -28,6 +29,7 @@ trait HasGrease
     use HasGreasedHydration;
     use HasGreasedAttributes;
     use HasGreasedClassAttributes;
+    use HasGreasedInitializers;
     use HasGreasedCasts;
     use HasGreasedSerialization;
 }

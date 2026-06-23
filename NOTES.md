@@ -604,12 +604,41 @@ Roughly highest-leverage first.
         and pinned by `HasGreasedClassAttributesParityTest` (battery / absent-null / parent-chain
         / the quirk both orderings / integration getters / carve-out memo). `realworld` held at
         −77.8% / −47% / −19.9% (zero regression). 291 tests / 735 assertions.
-    - **Remaining deeper lever (option b, not built):** `resolveClassAttribute` is still ~28%
-      self — the bulk is now call *frequency* (~13 calls/instance), not the cache. Freezing the
-      `initialize*`-derived per-instance state once per class (snapshot `fillable`/`hidden`/
-      `visible`/`appends`/`table`/`touches`/… after the first instance, apply by direct copy,
-      skip the booters' calls) would capture more — but it's a much bigger, higher-risk override
-      surface (many properties, exact init-order parity). A focused future tier, its own session.
+    - ✅ **SHIPPED: `HasGreasedInitializers`** (6th model tier, in `HasGrease`) — the deeper
+      "option b" freeze, and it landed clean. The setup: after the cache above, the eager profile
+      put `resolveClassAttribute` at **28.7% self (child) + 1.4% (parent)** — but now the bulk was
+      call *frequency*, not per-call cost. Each warm instance still made ~6–8 calls from the four
+      `initialize*` booters the prior tiers don't touch: `initializeGuardsAttributes` (`#[Fillable]`/
+      `#[Unguarded]`/`#[Guarded]`), `initializeHidesAttributes` (`#[Hidden]`/`#[Visible]`),
+      `initializeHasTimestamps` (`#[WithoutTimestamps]`/`#[Table]` timestamps),
+      `initializeHasRelationships` (`#[Touches]`). (`initializeModelAttributes`/
+      `initializeHasAttributes` — the other two — were *already* frozen by `HasGreasedHydration`,
+      and `getTable` reads `$this->table` directly in this framework version, so these four were
+      the entire remaining warm-path surface.)
+      - The fix is the proven freeze pattern (same as `HasGreasedHydration`'s two booters): a trait
+        method overrides each inherited framework booter (different inheritance levels → no
+        `insteadof`; the `initialize<Trait>` *name* is what `bootTraits()` registers, so the
+        override dispatches), cold path runs `parent::` once and snapshots the resulting properties
+        into the blueprint, warm path applies by copy. Snapshots: `[fillable, guarded]` /
+        `[hidden, visible]` / `[timestamps]` / `[touches]`.
+      - **The feared trap didn't apply.** The session brief warned `initializeGuardsAttributes`
+        calls `static::unguard()` (a static mutation a snapshot-and-skip might drop). The *installed*
+        framework (the one CI runs) sets `$this->guarded = []` instead — a pure property write. Every
+        one of the four booters writes only `$this->{property}`; none touch static/global state. So
+        the snapshot captures everything, and no divergence guard is needed (unlike `getCasts`, these
+        properties are read straight off the instance — `getFillable()` etc. — never re-derived from
+        a per-class cache a runtime `mergeFillable()` could leave stale). The snapshot captures each
+        booter's *post-merge* result, so the warm copy is an overwrite, never a double-merge.
+      - **Result:** `resolveClassAttribute` drops out of the eager profile's top 28 frames entirely
+        (28.7% → <1%; `totallyGuarded` is the newly-revealed #1 — a future lever). Tier-isolated
+        throughput A/B (prior-5 vs full-6, parity-gated, mean of 3 interleaved repeats): **−8.4% on
+        a 2,000-child eager `get()`**, on top of the −13.3% from the cache. `realworld` *improved*:
+        index_users −77.8% → **−79.1%**, show_post −47% → **−50.8%**, bulk_update held −20.0% (zero
+        regression, byte-identical parity probe green). Pinned by `HasGreasedInitializersParityTest`
+        (plain / every-attribute / `#[Unguarded]` / warm==cold / STI no-shared-snapshot / runtime
+        mutation after init / unguard static orthogonality / user-trait initializer coexistence) —
+        oracle = vanilla getters. 299 tests / 751 assertions. Profiler: `benchmarks/eager_excimer.php`;
+        A/B harness: `benchmarks/initializers_ab.php`.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
