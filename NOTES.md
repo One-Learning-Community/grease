@@ -672,6 +672,32 @@ Roughly highest-leverage first.
       ~14% incl — a *different axis*, already targeted by `Grease\Events\Dispatcher`, not the stock
       dispatcher the bench wires in). No clean, low-risk model-tier lever stands out next; the eager
       hydrate path is largely down to SQL + event dispatch + irreducible construction.
+    - ⚠️ **Honesty correction — the `eager_excimer.php` proxy is NOT representative of the realworld
+      endpoints.** Everything above profiled the synthetic `GUser::with('posts')->get()` loop, whose
+      models carry a *single integer cast*. Profiling the actual `realworld.php` endpoints
+      (`benchmarks/realworld_excimer.php`, same rich-cast models — boolean/decimal:2/array/datetime,
+      same seed, greased dispatcher, jit=off) shows they live on **different frames** than the proxy:
+      - `index_users` / `posts_with_author`: dominated by `addCastAttributesToArray` (~9–10% self,
+        **~46% incl** — the `toArray()` cast path for the non-date casts, which `HasGreasedSerialization`
+        correctly defers to `parent::`), the cast-type probes (`isEnumCastable`/`isClassCastable`/
+        `isClassSerializable`), `Brick\Math\BigNumber` (the `decimal:2` cast), and a **~13% cumulative**
+        chunk in the `withoutRecursion` recursion-guard machinery (`Onceable::hashFromTrace` +
+        `getRecursiveCallStack` + `clearRecursiveCallValue` + `getRecursionCache`). The hydration path
+        my two session wins target is a *smaller slice* here than the proxy implied.
+      - `show_post` (single `find()`): SQL-bound — `Connection::run` ~19% incl, `compileComponents`
+        ~12% incl, PDO fetch ~11% self. Hydration is noise at one row.
+      - `bulk_update` (write path): `getDirty` ~58% incl / `originalIsEquivalent` ~55% incl, under which
+        `Carbon::rawCreateFromFormat`/`asDateTime` (~30% incl) **re-parse date columns during dirty-
+        checking**. None of the read-path tiers touch this.
+      - **Consequence:** the initializer-freeze (−8.4%) and fill short-circuit (−5.2%) are real wins on
+        a *hydration-heavy* workload, but on these specific endpoints they're diluted — which is the
+        honest reason the macro moved only −77.8%→−79.5% (index_users) etc., not by the per-op delta.
+      - **New levers the proxy hid (unvalidated, future threads):** (1) the `withoutRecursion`/`Onceable`
+        recursion-guard overhead on `toArray()` (~13% on index_users) — a per-model guard Laravel runs
+        on every serialize; (2) the Carbon re-parse in `originalIsEquivalent`/`getDirty` on the write
+        path (`bulk_update`) — date *input* comparison, distinct from the date *output* the serialization
+        tier already greases; (3) `getCasts` still ~6% self on index_users *despite* being memoized —
+        pure call frequency from the per-attribute cast loop. Measure-first each before believing.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green
