@@ -11,6 +11,7 @@ use Grease\Tests\Fixtures\Container\FileLogger;
 use Grease\Tests\Fixtures\Container\LoggerContract;
 use Grease\Tests\Fixtures\Container\NeedsPrimitive;
 use Grease\Tests\Fixtures\Container\NoCtor;
+use Grease\Tests\Fixtures\Container\NullLogger;
 use Grease\Tests\Fixtures\Container\NullableDep;
 use Illuminate\Container\Container as VanillaContainer;
 use Illuminate\Contracts\Container\BindingResolutionException;
@@ -127,6 +128,43 @@ class BlueprintParityTest extends TestCase
         });
 
         $this->assertSame('rebound', $c->make(Ctrl::class)->logger->kind);
+    }
+
+    /**
+     * The plan caches reflection, not resolution — a contextual binding added AFTER the
+     * plan is warmed must still be honored, identically to vanilla.
+     */
+    public function test_contextual_binding_added_after_plan_is_warmed(): void
+    {
+        $probe = function (VanillaContainer $c) {
+            $c->bind(LoggerContract::class, FileLogger::class);
+            $before = get_class($c->make(Ctrl::class)->logger);     // warms the plan
+
+            $c->when(Ctrl::class)->needs(LoggerContract::class)->give(NullLogger::class);
+            $after = get_class($c->make(Ctrl::class)->logger);      // must reflect the new binding
+
+            return [$before, $after];
+        };
+
+        $this->assertSame($probe(new VanillaContainer), $probe(new GreasedContainer));
+    }
+
+    /** flush() must drop the blueprint and leave the container resolving cleanly. */
+    public function test_flush_clears_blueprint(): void
+    {
+        $c = new GreasedContainer;
+        $c->bind(LoggerContract::class, FileLogger::class);
+        $c->make(Ctrl::class); // warm
+
+        $plans = new \ReflectionProperty($c, 'greaseBuildPlans');
+        $this->assertNotEmpty($plans->getValue($c));
+
+        $c->flush();
+        $this->assertSame([], $plans->getValue($c));
+
+        // Still resolves from cold after a flush.
+        $c->bind(LoggerContract::class, NullLogger::class);
+        $this->assertSame('null', $c->make(Ctrl::class)->logger->kind);
     }
 
     /** A diverged plan must not leak between separate container instances. */
