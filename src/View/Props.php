@@ -16,11 +16,14 @@ use Illuminate\View\ComponentAttributeBag;
  * attribute-named locals.
  *
  * {@see \Grease\View\Compiler::compileProps()} evaluates the declaration once and calls
- * {@see mergeAttributes()}, which does the whole job — partition, defaults, surviving bag
- * — and returns one map the compiler binds with a tight `$$key = $value` loop: the
- * resolved prop locals plus `attributes` (the non-prop bag) as just another key. The loop
- * (not `extract`, which is slower and skips non-identifier keys) reproduces vanilla's
- * locals exactly, including the inaccessible `${'icon-name'}` kebab-alias local.
+ * {@see mergeAttributes()}, which does the partition, defaults and surviving bag — and
+ * returns the prop *candidates*, the `attributes` bag, and the surviving keys. The compiler
+ * binds the candidates with a tight `$$key = $$key ?? $value` loop (deferring to any existing
+ * scope local, exactly as vanilla's `get_defined_vars()`-aware emit did — an `@include`'d
+ * `['propValue' => 1]` still wins over the declared default), then `unset()`s any local a
+ * pass-through attribute shadows. The loop (not `extract`, which is slower and skips
+ * non-identifier keys) reproduces vanilla's locals exactly, including the inaccessible
+ * `${'icon-name'}` kebab-alias local.
  *
  * Internally the name set is the same membership `extractPropNames` builds (every name
  * plus kebab alias), shaped as a set for `isset()`; the static shape (names + which keys
@@ -40,23 +43,31 @@ class Props
     protected static array $meta = [];
 
     /**
-     * The whole `@props` resolution in one call: partition the incoming attributes into
-     * props (consumed) and the rest, apply defaults to the string-keyed props, and hand
-     * back a single map ready to `extract()` into the component scope — the resolved prop
-     * locals plus `attributes` (the surviving, non-prop bag). Replaces the entire inlined
-     * block the compiler used to emit. The surviving bag is a {@see GreaseComponentAttributeBag},
-     * so the `$attributes->merge([...])` nearly every component template runs takes the
+     * The partitioning half of `@props` resolution in one call: split the incoming
+     * attributes into props (consumed) and the rest, apply defaults to the string-keyed
+     * props, and hand back the three pieces the compiler's emit binds into scope — the
+     * resolved prop *candidate* values, the surviving `attributes` bag, and the surviving
+     * (non-prop) keys. The surviving bag is a {@see GreaseComponentAttributeBag}, so the
+     * `$attributes->merge([...])` nearly every component template runs takes the
      * Collection-free fast path — byte-identical to vanilla's.
      *
-     * Equivalent to vanilla's partition + defaults, with one wrinkle the caller accepts by
-     * using `extract()`: a prop reached via a *non-identifier* key (the kebab alias, e.g.
-     * `icon-name`) lands in the map but `extract()` skips it — exactly as vanilla's value
-     * landed in an inaccessible `${'icon-name'}` local. The rendered output is identical;
-     * only the (unusable) junk local differs.
+     * Crucially this is *only* the partition: it cannot apply vanilla's `$$key = $$key ??`
+     * scope-deferral, because the existing scope locals (e.g. a variable an
+     * `@include('sub', ['propValue' => 1])` extracted before the `@props` block ran) live in
+     * the caller's frame, not here. So the returned `props` are *candidates* — vanilla's
+     * `passed-attribute ?? default` — and the compiler binds them with `$$key = $$key ?? $candidate`
+     * so an existing local still wins, exactly as vanilla does. Likewise `rest` is returned
+     * so the emit can `unset()` any scope local a pass-through attribute shadows (vanilla's
+     * `get_defined_vars()` cleanup, done as a targeted unset since unset-of-absent is a no-op).
+     *
+     * One wrinkle the compiler's `$$key` bind loop accepts: a prop reached via a
+     * *non-identifier* key (the kebab alias, e.g. `icon-name`) lands in `props` as
+     * `${'icon-name'}` — exactly as vanilla's value landed in that same inaccessible local.
+     * The rendered output is identical; only the (unusable) junk local differs.
      *
      * @param  string  $site  stable id for this `@props` location (compile-time constant)
      * @param  array<array-key, mixed>  $declaration  the `@props` array (one evaluation)
-     * @return array<string, mixed>  prop locals + `attributes`, ready for `extract()`
+     * @return array{props: array<array-key, mixed>, attributes: GreaseComponentAttributeBag, rest: array<array-key, mixed>}
      */
     public static function mergeAttributes(string $site, array $declaration, ComponentAttributeBag $attributes): array
     {
@@ -80,9 +91,11 @@ class Props
             $props[$key] ??= $declaration[$key];
         }
 
-        $props['attributes'] = new GreaseComponentAttributeBag($rest);
-
-        return $props;
+        return [
+            'props' => $props,
+            'attributes' => new GreaseComponentAttributeBag($rest),
+            'rest' => $rest,
+        ];
     }
 
     /**

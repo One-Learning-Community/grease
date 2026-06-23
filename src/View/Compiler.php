@@ -66,15 +66,6 @@ class Compiler extends BladeCompiler
     }
 
     /**
-     * {@inheritDoc}
-     *
-     * The whole inlined block — partition, defaults, scope cleanup — collapses into one
-     * {@see Props::mergeAttributes()} call returning a single map (resolved prop locals
-     * plus `attributes`, the surviving bag) that a tight `$$__key = $__value` loop binds
-     * into scope. The loop (not `extract`, which is slower and skips non-identifier keys)
-     * reproduces vanilla's locals exactly, including the inaccessible kebab-alias local.
-     */
-    /**
      * Memoized per source path — see {@see $greaseCompiledPaths}. The base computes a
      * hash of the path on every call; this pays it once. Identical return value.
      */
@@ -87,11 +78,30 @@ class Compiler extends BladeCompiler
     {
         $site = md5(($this->getPath() ?: 'inline').':'.$this->greasePropsSite++);
 
-        return "<?php foreach (\\Grease\\View\\Props::mergeAttributes('{$site}', {$expression}, \$attributes ?? new \\Illuminate\\View\\ComponentAttributeBag) as \$__key => \$__value) {
-    \$\$__key = \$__value;
+        // `Props::mergeAttributes` can only partition (it has no access to the caller's
+        // scope), so it returns the prop *candidates* (passed-attribute ?? default), the
+        // surviving `attributes` bag, and the surviving keys. We finish the job here, in the
+        // template frame, to stay byte-identical to vanilla:
+        //   - props bind with `$$key = $$key ?? $candidate`, so an existing scope local wins
+        //     (the load-bearing case: `@include('sub', ['propValue' => 1])` extracts
+        //     `$propValue` before this block runs — vanilla preserves it, so must we);
+        //   - then `unset()` any local a pass-through attribute shadows (vanilla's
+        //     `get_defined_vars()` cleanup, here a targeted unset — unset-of-absent is a
+        //     no-op, and a pass-through key can never name a prop, the partition being
+        //     mutually exclusive).
+        return "<?php \$__grease = \\Grease\\View\\Props::mergeAttributes('{$site}', {$expression}, \$attributes ?? new \\Illuminate\\View\\ComponentAttributeBag);
+
+foreach (\$__grease['props'] as \$__key => \$__value) {
+    \$\$__key = \$\$__key ?? \$__value;
 }
 
-unset(\$__key, \$__value); ?>";
+\$attributes = \$__grease['attributes'];
+
+foreach (\$__grease['rest'] as \$__key => \$__value) {
+    unset(\$\$__key);
+}
+
+unset(\$__grease, \$__key, \$__value); ?>";
     }
 
     /**

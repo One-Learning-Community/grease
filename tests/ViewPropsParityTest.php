@@ -41,12 +41,35 @@ class ViewPropsParityTest extends TestCase
         $this->assertSame($vanilla['attributes'], $greased['attributes'], 'surviving attributes diverged');
     }
 
+    /**
+     * The load-bearing `@include` case: a prop also exists as a scope local because the
+     * parent passed it as include data (`@include('sub', ['propValue' => 1])` extracts
+     * `$propValue = 1` before the `@props` block runs). Vanilla's emit reads that local
+     * (`$$key = $$key ?? ...`) so the passed value wins over the declared default; the
+     * greased emit must do the same. Regression for the "renders the default, ignores the
+     * passed value" bug.
+     *
+     * @param  array<string, mixed>  $locals  scope locals present before the block (the include data)
+     * @param  array<string, mixed>  $incoming  attributes the parent passes in
+     */
+    #[DataProvider('scopeScenarios')]
+    public function test_greased_props_resolution_honors_existing_scope_locals(string $declaration, array $locals, array $incoming): void
+    {
+        $directive = "@props({$declaration})";
+
+        $vanilla = $this->executeWithLocals((new BladeCompiler(new Filesystem, sys_get_temp_dir()))->compileString($directive), $locals, $incoming);
+        $greased = $this->executeWithLocals((new Compiler(new Filesystem, sys_get_temp_dir()))->compileString($directive), $locals, $incoming);
+
+        $this->assertSame($vanilla['props'], $greased['props'], 'resolved prop variables diverged with pre-seeded scope locals');
+        $this->assertSame($vanilla['attributes'], $greased['attributes'], 'surviving attributes diverged with pre-seeded scope locals');
+    }
+
     public function test_greased_emit_uses_the_fast_path(): void
     {
         $php = (new Compiler(new Filesystem, sys_get_temp_dir()))->compileString("@props(['type' => 'button'])");
 
         $this->assertStringContainsString('Grease\\View\\Props::mergeAttributes(', $php);
-        $this->assertStringContainsString('$$__key = $__value', $php);   // tight bind loop, not extract()
+        $this->assertStringContainsString('$$__key = $$__key ?? $__value', $php);   // scope-deferring bind loop, not extract()
         $this->assertStringNotContainsString('extract(', $php);
         $this->assertStringNotContainsString('get_defined_vars()', $php);
         $this->assertStringNotContainsString('extractPropNames', $php);
@@ -150,6 +173,75 @@ class ViewPropsParityTest extends TestCase
         };
 
         return $run(new ComponentAttributeBag($incoming));
+    }
+
+    /**
+     * Like {@see execute()}, but pre-seeds the scope with `$locals` before running the
+     * compiled `@props` block — modelling a parent that passed those names as `@include`
+     * data (which `extract()`s them into scope before the block runs). The captured prop
+     * locals therefore reflect vanilla's "existing local wins" precedence.
+     *
+     * @param  array<string, mixed>  $locals
+     * @param  array<string, mixed>  $incoming
+     * @return array{props: array<string, mixed>, attributes: array<string, mixed>}
+     */
+    private function executeWithLocals(string $compiled, array $locals, array $incoming): array
+    {
+        $run = static function (ComponentAttributeBag $attributes) use ($compiled, $locals): array {
+            extract($locals);
+
+            eval('?>'.$compiled);
+
+            $vars = get_defined_vars();
+            unset($vars['attributes'], $vars['compiled'], $vars['locals']);
+
+            foreach (array_keys($vars) as $name) {
+                if (str_starts_with((string) $name, '__')) {
+                    unset($vars[$name]);
+                }
+            }
+
+            return ['props' => $vars, 'attributes' => $attributes->getAttributes()];
+        };
+
+        return $run(new ComponentAttributeBag($incoming));
+    }
+
+    /** @return array<string, array{0: string, 1: array<string, mixed>, 2: array<string, mixed>}> */
+    public static function scopeScenarios(): array
+    {
+        return [
+            // The reported bug: an include passes the value, no attribute carries it —
+            // the passed local must beat the default.
+            'include data beats the default' => [
+                "['propValue' => 0]",
+                ['propValue' => 1],
+                [],
+            ],
+            'include data present, default would otherwise apply' => [
+                "['type' => 'primary', 'size' => 'md']",
+                ['size' => 'lg'],
+                [],
+            ],
+            // Existing local outranks an attribute of the same name, too.
+            'existing local outranks a passed attribute' => [
+                "['type' => 'primary']",
+                ['type' => 'fromInclude'],
+                ['type' => 'fromAttribute'],
+            ],
+            // A scope local that collides with a *pass-through* (non-prop) attribute is
+            // unset by vanilla's cleanup — the greased emit must unset it as well.
+            'pass-through attribute shadows a scope local' => [
+                "['type' => 'a']",
+                ['class' => 'localValue'],
+                ['class' => 'btn', 'id' => 'go'],
+            ],
+            'list-style prop seeded by include data' => [
+                "['readonly', 'required']",
+                ['readonly' => true],
+                [],
+            ],
+        ];
     }
 
     /** @return array<string, array{0: string, 1: array<string, mixed>}> */
