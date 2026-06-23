@@ -414,16 +414,27 @@ Roughly highest-leverage first.
       union from `$this->data` first flips key order (the `@props` path reads
       `get_defined_vars()` — order is load-bearing), and lazy/skip-rendering unused
       Renderables changes side effects (`@push`/`@section`) that affect *other* views' output.
-    - **❌ Class-component `$attributes->merge()` (vanilla, ~8% incl on page-app): blocked by
-      emit ordering.** Class components build their bag via `Component::newAttributeBag()` →
-      a *vanilla* `ComponentAttributeBag`, so their template merge takes the slow Collection
-      path (Grease's greased bag only reaches anonymous components, via `Props::mergeAttributes`).
-      Can't upgrade the bag from the `ComponentTagCompiler` emit: the boilerplate calls
-      `$component->data()` (which extracts `$this->attributes` into template scope) *inside*
-      `startComponent`, BEFORE `withAttributes` populates it — so the template captures the
-      vanilla bag reference, and you can't change an object's class in place. Reaching it
-      needs an `@component`-emit rewrite (version-fragile, the high-risk path). Partly a
-      fixture artifact anyway — real apps lean on anonymous components, already greased.
+    - **✅ Class-component `$attributes->merge()` greased via a one-line emit seed** (was
+      ~8% inclusive vanilla Collection-merge on page-app). Class (and class-less, no-`@props`)
+      components build their bag via `Component::newAttributeBag()` → a *vanilla*
+      `ComponentAttributeBag`, so their template merge took the slow Collection path (Grease's
+      greased bag previously reached only `@props` components, via `Props::mergeAttributes`).
+      The trap: the opening boilerplate calls `$component->data()` *inside* `startComponent`,
+      and `data()` lazily creates `$this->attributes` (`?: newAttributeBag()`) and returns it
+      as the template's `attributes` — BEFORE `withAttributes` runs. `withAttributes` then only
+      *mutates that same object in place*; you can't reclass it after. **The escape:** after
+      `resolve()`/`withName()` the public `$attributes` is still null, so Grease overrides the
+      static `compileClassComponentOpening` to emit one extra line —
+      `$component->attributes ??= new \Grease\View\ComponentAttributeBag([])` — *before*
+      `startComponent`. `data()`'s `?:` then adopts the greased bag, `withAttributes` populates
+      it in place, and the template's `merge()` takes the Collection-free path. Byte-identical
+      (greased bag overrides only `merge`, parity-proven; empty seed == vanilla's lazy
+      `newAttributeBag()`; `??=` preserves a constructor-set bag; `@props` components no-op the
+      seed since `Props` re-bags anyway). Reached via the `static::` call in `compileComponent`
+      (late-binds to `Grease\View\Compiler`) — no ComponentTagCompiler/`@component` rewrite.
+      Profile confirms the swap: vanilla `merge` (8% incl) + its `getArrayableItems`/partition
+      tail **gone**, greased `merge` now ~3.3% incl. **App page −15.5% → −21.0%** (p50, Linux).
+      Test: `test_class_component_opening_seeds_a_greased_attribute_bag`.
     - **Map of the rest (page-app tail, all measured, all blocked):** `Component::resolve`/
       `data`/`extractPublic*` are statics/methods on the *user's* component class — not
       reachable without a Grease base class (breaks the drop-in opt-in). `componentData` /

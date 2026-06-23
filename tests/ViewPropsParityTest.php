@@ -80,6 +80,32 @@ class ViewPropsParityTest extends TestCase
         $this->assertStringContainsString('Grease\\View\\Props::mergeAttributes(', $greased->compileString("@props(['x' => 1])"));
     }
 
+    public function test_class_component_opening_seeds_a_greased_attribute_bag(): void
+    {
+        $greased = Compiler::compileClassComponentOpening('App\\View\\Card', "'card'", '[]', 'abc123');
+        $vanilla = BladeCompiler::compileClassComponentOpening('App\\View\\Card', "'card'", '[]', 'abc123');
+
+        // The seed line is the only addition, and vanilla never had it.
+        $seed = '$component->attributes ??= new \\Grease\\View\\ComponentAttributeBag([]);';
+        $this->assertStringContainsString($seed, $greased);
+        $this->assertStringNotContainsString($seed, $vanilla);
+
+        // It must land AFTER shouldRender() (only when rendering) and BEFORE the
+        // startComponent that calls data() — data() captures the bag, so a later seed
+        // would be too late. That ordering is the whole mechanism.
+        $afterShouldRender = strpos($greased, '$component->shouldRender()');
+        $seedPos = strpos($greased, $seed);
+        $startComponent = strpos($greased, '$__env->startComponent(');
+        $this->assertNotFalse($seedPos);
+        $this->assertGreaterThan($afterShouldRender, $seedPos, 'seed must follow shouldRender()');
+        $this->assertLessThan($startComponent, $seedPos, 'seed must precede startComponent()/data()');
+
+        // Nothing else changed: resolve/withName/startComponent are all still emitted.
+        foreach (['::resolve(', '$component->withName(', '$__env->startComponent('] as $needle) {
+            $this->assertStringContainsString($needle, $greased);
+        }
+    }
+
     public function test_compiled_path_matches_vanilla_and_is_memoized(): void
     {
         $cache = sys_get_temp_dir();

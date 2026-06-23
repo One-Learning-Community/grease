@@ -93,4 +93,39 @@ class Compiler extends BladeCompiler
 
 unset(\$__key, \$__value); ?>";
     }
+
+    /**
+     * Seed every rendered component's attribute bag as a greased one, so the bag the
+     * template merges is {@see ComponentAttributeBag} (fast `merge()`) instead of vanilla.
+     *
+     * The opening emit fixes the bag's class identity before the template ever sees it:
+     * `startComponent($component->resolveView(), $component->data())` runs first, and
+     * `data()` lazily creates `$this->attributes` (`?: newAttributeBag()`) — a *vanilla*
+     * bag — then returns it as the `attributes` variable. `withAttributes()` later only
+     * mutates that same object in place; you can't reclass it after the fact. So the win
+     * has to land *before* `data()`.
+     *
+     * After `resolve()`/`withName()` the component's public `$attributes` is still null,
+     * so one `??=` seeds an (empty) greased bag that `data()`'s `?:` then adopts and
+     * `withAttributes()` populates in place — the template ends up holding a greased bag
+     * and its `$attributes->merge([...])` takes the Collection-free path. Byte-identical:
+     * the greased bag overrides only `merge()` (parity-proven), an empty seed is
+     * indistinguishable from vanilla's lazy `newAttributeBag()`, and `??=` leaves any
+     * constructor-set bag untouched. Covers class components and class-less components
+     * without `@props` alike (for `@props` ones {@see Props} already greases the bag, so
+     * the seed is a harmless no-op there). Overrides the parent's static verbatim plus the
+     * one seed line; reached via the `static::` call in `compileComponent()`.
+     */
+    public static function compileClassComponentOpening(string $component, string $alias, string $data, string $hash)
+    {
+        return implode("\n", [
+            '<?php if (isset($component)) { $__componentOriginal'.$hash.' = $component; } ?>',
+            '<?php if (isset($attributes)) { $__attributesOriginal'.$hash.' = $attributes; } ?>',
+            '<?php $component = '.$component.'::resolve('.($data ?: '[]').' + (isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag ? $attributes->all() : [])); ?>',
+            '<?php $component->withName('.$alias.'); ?>',
+            '<?php if ($component->shouldRender()): ?>',
+            '<?php $component->attributes ??= new \Grease\View\ComponentAttributeBag([]); ?>',
+            '<?php $__env->startComponent($component->resolveView(), $component->data()); ?>',
+        ]);
+    }
 }
