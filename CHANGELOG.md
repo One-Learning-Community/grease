@@ -6,6 +6,17 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-23
+
+Grease opens a **new axis** beyond the model and view: the per-request *foundation* — the
+application container and the HTTP request. Two opt-in, byte-/behaviour-identical tiers
+join the bundle, and a flagship cumulative-stack benchmark shows every tier compounding on
+a real request through the kernel (JSON + Blade) — the full mixed page-load suite runs
+**~−47%** end-to-end for **~+2%** retained memory. The parity suite grows to **400 tests /
+1066 assertions**. Honest throughout: the foundation tiers' eye-catching per-op wins
+(container −38.8%/resolve, request −41%/request) are *thin slices* of a full request, so
+each moves an endpoint a few percent — compounding tiers, not standalone headlines.
+
 ### Added
 
 - **The foundation axis — two new tiers beyond the model trait**, each opt-in,
