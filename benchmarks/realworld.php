@@ -21,6 +21,26 @@ use Grease\Events\Dispatcher as GreaseDispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 
+// `--json[=path]` switches the output from the human table to a machine-readable payload
+// (written to <path>, or stdout) — the live input to the docs. Same measurement either way,
+// so the published numbers are exactly what this parity-gated harness produces.
+$args = array_slice($argv, 1);
+$jsonOut = null;
+$emitJson = false;
+foreach ($args as $i => $a) {
+    if ($a === '--json' || str_starts_with($a, '--json=')) {
+        $emitJson = true;
+        $jsonOut = str_contains($a, '=') ? substr($a, 7) : null;
+        unset($args[$i]);
+    }
+}
+$args = array_values($args);
+$say = function (string $line) use ($emitJson): void {
+    if (! $emitJson) {
+        echo $line;
+    }
+};
+
 // Boots Eloquent with a real stock event dispatcher wired in, so model events
 // actually fire — the work a real endpoint does. See BootsEloquent.
 $capsule = BootsEloquent::capsule();
@@ -184,7 +204,7 @@ foreach ($WORKLOADS as $name => $w) {
 }
 
 \Illuminate\Support\Carbon::setTestNow();
-echo "PARITY: PASS — grease output byte-identical to vanilla.\n".str_repeat('-', 70)."\n";
+$say("PARITY: PASS — grease output byte-identical to vanilla.\n".str_repeat('-', 70)."\n");
 
 // Linear-interpolated percentile (same method as numpy's default). p in [0,100].
 function percentile(array $xs, float $p): float
@@ -201,9 +221,18 @@ function percentile(array $xs, float $p): float
     return $xs[$lo] + ($xs[$hi] - $xs[$lo]) * ($rank - $lo);
 }
 
-$rounds = (int) ($argv[1] ?? 25);
+// Human labels for the endpoints, so the exported payload is self-describing.
+$LABELS = [
+    'index_users' => 'list 100 users → JSON',
+    'posts_with_author' => '100 posts with author → JSON',
+    'show_post' => 'show one post (with author)',
+    'bulk_update' => 'load 150, mutate, save',
+];
+
+$rounds = (int) ($args[0] ?? 25);
 $warmup = 6;
 
+$endpoints = [];
 foreach ($WORKLOADS as $name => $w) {
     $t = ['plain' => [], 'grease' => []];
     for ($r = 0; $r < $warmup + $rounds; $r++) {
@@ -218,10 +247,59 @@ foreach ($WORKLOADS as $name => $w) {
             }
         }
     }
-    echo "$name\n";
+
+    $percentiles = [];
     foreach ([50, 75, 90, 99] as $pct) {
         $p = percentile($t['plain'], $pct) / 1e3;
         $g = percentile($t['grease'], $pct) / 1e3;
-        printf("  p%-2d  vanilla %9.1f µs   grease %9.1f µs   Δ %+6.1f%%\n", $pct, $p, $g, ($g - $p) / $p * 100);
+        $percentiles[$pct] = [
+            'vanilla_us' => round($p, 1),
+            'grease_us' => round($g, 1),
+            'delta_pct' => round(($g - $p) / $p * 100, 1),
+        ];
+    }
+
+    $endpoints[] = [
+        'key' => $name,
+        'label' => $LABELS[$name] ?? $name,
+        'vanilla_us' => $percentiles[50]['vanilla_us'],
+        'grease_us' => $percentiles[50]['grease_us'],
+        'delta_pct' => $percentiles[50]['delta_pct'],
+        'percentiles' => $percentiles,
+    ];
+
+    $say("$name\n");
+    foreach ($percentiles as $pct => $row) {
+        $say(sprintf(
+            "  p%-2d  vanilla %9.1f µs   grease %9.1f µs   Δ %+6.1f%%\n",
+            $pct, $row['vanilla_us'], $row['grease_us'], $row['delta_pct'],
+        ));
+    }
+}
+
+if ($emitJson) {
+    // Prefer a SHA passed in by the runner (the container often lacks git context);
+    // fall back to asking git directly when run on the host.
+    $gitSha = getenv('GREASE_BENCH_SHA') ?: (trim((string) @shell_exec('git rev-parse --short HEAD 2>/dev/null')) ?: null);
+    $payload = [
+        'generated_at' => gmdate('Y-m-d\TH:i:s\Z'),
+        'git_sha' => $gitSha,
+        'php_version' => PHP_VERSION,
+        'env' => getenv('GREASE_BENCH_ENV') ?: 'linux-docker · sqlite :memory: · JIT',
+        'rounds' => $rounds,
+        'parity' => 'pass',
+        'source' => 'benchmarks/realworld.php',
+        'macro' => $endpoints,
+    ];
+    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n";
+
+    if ($jsonOut !== null) {
+        if (! is_dir($dir = dirname($jsonOut))) {
+            mkdir($dir, 0755, true);
+        }
+        file_put_contents($jsonOut, $json);
+        fwrite(STDERR, "wrote $jsonOut (".count($endpoints)." endpoints, git $gitSha)\n");
+    } else {
+        echo $json;
     }
 }

@@ -18,15 +18,15 @@ is below).
 In-memory SQLite, real queries, controller-shaped workloads. Vanilla Eloquent vs. the
 same models with `HasGrease`. Output is byte-identical.
 
-| Endpoint (one request, incl. SQL) | vanilla | + Grease | Δ |
-| --- | ---: | ---: | :---: |
-| index: list 100 users → JSON | 3.12 ms | 0.69 ms | **−78%** |
-| eager: 100 posts with author → JSON | 6.01 ms | 1.39 ms | **−77%** |
-| bulk: load 150, mutate, save | 7.25 ms | 5.90 ms | **−18%** |
-| show one post (with author) | 0.11 ms | 0.06 ms | **−47%** |
+<BenchTable />
+
+These numbers are **live** — rendered straight from the JSON the parity-gated harness
+emits, so the table can never drift from what the benchmark actually measures (and never
+publishes at all if parity fails). Run it yourself, or regenerate the figures above:
 
 ```bash
-php benchmarks/realworld.php
+php benchmarks/realworld.php          # human-readable table
+bash benchmarks/export-metrics.sh     # regenerate the live JSON the docs read
 ```
 
 The gain scales with how much your request hydrates: wide selects, eager loads, and
