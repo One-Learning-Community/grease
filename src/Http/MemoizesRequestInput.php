@@ -28,10 +28,24 @@ use Illuminate\Support\Arr;
  * `isJson` memo since they can change the content-type.
  *
  * The ONE carve-out (documented, mirrors the Eloquent `$casts`-in-constructor caveat):
- * **direct bag mutation** — `$request->request->set(...)`, `$request->query->add(...)`,
- * `$request->json()->set(...)` — bypasses every method and is not cheaply observable, so
- * it's unsupported after the first input read on a greased request. Use the Laravel-level
- * mutators instead, which the memo tracks.
+ * **direct mutation of an input-source bag** — `$request->query->add(...)`,
+ * `$request->request->set(...)`, `$request->json()->set(...)` — bypasses every method and
+ * is not cheaply observable, so it's unsupported after the first input read on a greased
+ * request. Use the Laravel-level mutators instead, which the memo tracks.
+ *
+ * Scope of the carve-out (audited per bag — only the input source matters):
+ *   - `query` / `request` / `json` — feed `input()`/`all()`. Direct mutation = carve-out.
+ *   - `attributes` — route params / middleware context (`$request->attributes->set(...)`).
+ *     Read via `attributes->get()` / the deprecated `get()` / `route()`, NEVER by
+ *     `input()`/`all()`/`__get`. **Direct mutation is fully safe** — outside the memo.
+ *   - `cookies` — not read by `input()`/`all()`. Safe to mutate directly.
+ *   - `files` — feeds `all()` via `allFiles()`, but vanilla already caches that
+ *     (`$convertedFiles`), so a post-read file mutation is stale in vanilla too — parity
+ *     holds, no new caveat.
+ *   - `server` / `headers` — affect the input source / content-type only through
+ *     `setMethod()` and the content-type header, both handled (setMethod flushes;
+ *     content-type is request-immutable). Direct rewriting of these bags mid-request is
+ *     exotic and outside the supported surface.
  *
  * Why this can't be locked down (it was considered): the obvious guard — making the
  * `query`/`request` bag properties private here — is impossible *and* would miss the mark.

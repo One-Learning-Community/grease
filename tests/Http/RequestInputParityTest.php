@@ -197,6 +197,35 @@ class RequestInputParityTest extends TestCase
         );
     }
 
+    /**
+     * Bags OUTSIDE the input surface may be mutated directly without affecting the memo —
+     * `attributes` (route params / middleware context) and `cookies` feed none of
+     * `input()`/`all()`/`isJson()`. Replicates the common middleware pattern
+     * `$request->attributes->set(...)` after input has been read.
+     */
+    public function test_attributes_bag_mutation_is_safe(): void
+    {
+        $probe = function (string $class) {
+            $r = $class::create('/x?a=1&b=2', 'GET');
+            $r->all();                                  // warm the memo
+            $r->input('a');
+            $r->attributes->set('mw_context', 'injected');   // middleware adds context
+            $r->cookies->set('sid', 'xyz');
+
+            return [
+                'all' => $r->all(),                     // unaffected by attributes/cookies
+                'input_a' => $r->input('a'),
+                'attr' => $r->attributes->get('mw_context'),
+                'get_attr' => $r->get('mw_context'),    // deprecated get() reads attributes first
+            ];
+        };
+
+        $this->assertSame(
+            var_export($probe(VanillaRequest::class), true),
+            var_export($probe(GreasedRequest::class), true),
+        );
+    }
+
     public function test_repeated_reads_are_stable(): void
     {
         $r = self::post(GreasedRequest::class);
