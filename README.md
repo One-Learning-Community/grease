@@ -66,7 +66,7 @@ Representative deltas, measured on Linux ([reproduce on your own build](https://
 <!-- BENCH:END -->
 - **Per operation:** hydrate −34%, `toArray` −47%, set+dirty −39%, read −27%, enum −48%, date serialization −87%.
 - **Event dispatcher** (app-wide): −53% no-listener dispatch, ~halves a render-dense request's event overhead.
-- **Blade** (render path, app-wide): −38.9% simple / −29.9% rich component renders, −27.8% a `$loop`-heavy table, −19.4% a layout — byte-identical HTML.
+- **Blade** (render path, app-wide): −28.3% simple / −23.4% rich component renders, −26.8% a `$loop`-heavy table, −20.3% a layout — byte-identical HTML.
 - **Foundation tiers** (container & request, app-entry opt-in): −38.8% per container resolve, −41% per input-heavy request. Layered with everything above, a real mixed page-load (JSON + Blade) request suite stacks to **~−47% end-to-end** for **~+2% retained memory** — see the [cumulative-stack table](https://one-learning-community.github.io/grease/guide/benchmarks#the-whole-stack-compounding).
 
 These are `:memory:`/Linux figures — read them as Grease's share of the work, not your p99,

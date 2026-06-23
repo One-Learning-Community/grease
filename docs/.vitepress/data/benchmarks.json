@@ -1,6 +1,6 @@
 {
-    "generated_at": "2026-06-23T17:19:28Z",
-    "git_sha": "aec0ce0",
+    "generated_at": "2026-06-23T18:12:06Z",
+    "git_sha": "f4ac826",
     "php_version": "8.4.22",
     "env": "linux-docker · sqlite :memory: · JIT",
     "rounds": 40,
@@ -128,95 +128,95 @@
         {
             "key": "page-simple",
             "label": "simple avatar (initials + one merge)",
-            "vanilla_ms": 15.77,
-            "grease_ms": 9.69,
-            "delta_pct": -38.6,
+            "vanilla_ms": 15.71,
+            "grease_ms": 11.25,
+            "delta_pct": -28.3,
             "percentiles": {
                 "50": {
-                    "vanilla_ms": 15.77,
-                    "grease_ms": 9.69,
-                    "delta_pct": -38.6
+                    "vanilla_ms": 15.71,
+                    "grease_ms": 11.25,
+                    "delta_pct": -28.3
                 },
                 "90": {
-                    "vanilla_ms": 16.37,
-                    "grease_ms": 10.05,
-                    "delta_pct": -38.6
+                    "vanilla_ms": 16.55,
+                    "grease_ms": 11.64,
+                    "delta_pct": -29.6
                 }
             }
         },
         {
             "key": "page-foreach",
             "label": "simple avatar, @foreach (realistic loop)",
-            "vanilla_ms": 17.18,
-            "grease_ms": 10.61,
-            "delta_pct": -38.2,
+            "vanilla_ms": 15.64,
+            "grease_ms": 11.31,
+            "delta_pct": -27.7,
             "percentiles": {
                 "50": {
-                    "vanilla_ms": 17.18,
-                    "grease_ms": 10.61,
-                    "delta_pct": -38.2
+                    "vanilla_ms": 15.64,
+                    "grease_ms": 11.31,
+                    "delta_pct": -27.7
                 },
                 "90": {
-                    "vanilla_ms": 18.23,
-                    "grease_ms": 11.26,
-                    "delta_pct": -38.2
+                    "vanilla_ms": 16.37,
+                    "grease_ms": 11.95,
+                    "delta_pct": -27
                 }
             }
         },
         {
             "key": "page-rich",
             "label": "rich avatar (5 props, @php, conditionals, slots)",
-            "vanilla_ms": 24.11,
-            "grease_ms": 16.53,
-            "delta_pct": -31.4,
+            "vanilla_ms": 22.01,
+            "grease_ms": 16.87,
+            "delta_pct": -23.4,
             "percentiles": {
                 "50": {
-                    "vanilla_ms": 24.11,
-                    "grease_ms": 16.53,
-                    "delta_pct": -31.4
+                    "vanilla_ms": 22.01,
+                    "grease_ms": 16.87,
+                    "delta_pct": -23.4
                 },
                 "90": {
-                    "vanilla_ms": 26.02,
-                    "grease_ms": 18.98,
-                    "delta_pct": -27.1
+                    "vanilla_ms": 22.46,
+                    "grease_ms": 17.56,
+                    "delta_pct": -21.8
                 }
             }
         },
         {
             "key": "page-rich-foreach",
             "label": "rich avatar, @foreach (realistic loop)",
-            "vanilla_ms": 23.16,
-            "grease_ms": 15.95,
-            "delta_pct": -31.2,
+            "vanilla_ms": 21.89,
+            "grease_ms": 16.7,
+            "delta_pct": -23.7,
             "percentiles": {
                 "50": {
-                    "vanilla_ms": 23.16,
-                    "grease_ms": 15.95,
-                    "delta_pct": -31.2
+                    "vanilla_ms": 21.89,
+                    "grease_ms": 16.7,
+                    "delta_pct": -23.7
                 },
                 "90": {
-                    "vanilla_ms": 24.49,
-                    "grease_ms": 16.6,
-                    "delta_pct": -32.2
+                    "vanilla_ms": 22.63,
+                    "grease_ms": 17.27,
+                    "delta_pct": -23.7
                 }
             }
         },
         {
             "key": "page-app",
             "label": "app page (class components, slots, @include/@each, composer)",
-            "vanilla_ms": 45.38,
-            "grease_ms": 35.44,
-            "delta_pct": -21.9,
+            "vanilla_ms": 44.35,
+            "grease_ms": 36.25,
+            "delta_pct": -18.2,
             "percentiles": {
                 "50": {
-                    "vanilla_ms": 45.38,
-                    "grease_ms": 35.44,
-                    "delta_pct": -21.9
+                    "vanilla_ms": 44.35,
+                    "grease_ms": 36.25,
+                    "delta_pct": -18.2
                 },
                 "90": {
-                    "vanilla_ms": 46.21,
-                    "grease_ms": 36.82,
-                    "delta_pct": -20.3
+                    "vanilla_ms": 45.06,
+                    "grease_ms": 37.21,
+                    "delta_pct": -17.4
                 }
             }
         },
@@ -224,75 +224,75 @@
             "key": "page-table",
             "label": "data table (nested @foreach, heavy $loop use)",
             "vanilla_ms": 0.42,
-            "grease_ms": 0.31,
-            "delta_pct": -28.1,
+            "grease_ms": 0.3,
+            "delta_pct": -26.8,
             "percentiles": {
                 "50": {
                     "vanilla_ms": 0.42,
-                    "grease_ms": 0.31,
-                    "delta_pct": -28.1
+                    "grease_ms": 0.3,
+                    "delta_pct": -26.8
                 },
                 "90": {
-                    "vanilla_ms": 0.45,
-                    "grease_ms": 0.35,
-                    "delta_pct": -21.3
+                    "vanilla_ms": 0.43,
+                    "grease_ms": 0.33,
+                    "delta_pct": -21.6
                 }
             }
         },
         {
             "key": "page-layout",
             "label": "layout inheritance (@extends/@section/@yield/@push)",
-            "vanilla_ms": 0.44,
-            "grease_ms": 0.34,
-            "delta_pct": -21.7,
+            "vanilla_ms": 0.43,
+            "grease_ms": 0.35,
+            "delta_pct": -20.3,
             "percentiles": {
                 "50": {
-                    "vanilla_ms": 0.44,
-                    "grease_ms": 0.34,
-                    "delta_pct": -21.7
+                    "vanilla_ms": 0.43,
+                    "grease_ms": 0.35,
+                    "delta_pct": -20.3
                 },
                 "90": {
-                    "vanilla_ms": 0.5,
-                    "grease_ms": 0.39,
-                    "delta_pct": -22.9
+                    "vanilla_ms": 0.46,
+                    "grease_ms": 0.46,
+                    "delta_pct": 1.7
                 }
             }
         },
         {
             "key": "page-stacks",
             "label": "asset stacks (@push/@prepend per row, @stack)",
-            "vanilla_ms": 1.54,
-            "grease_ms": 1.36,
-            "delta_pct": -11.5,
+            "vanilla_ms": 1.64,
+            "grease_ms": 1.48,
+            "delta_pct": -9.6,
             "percentiles": {
                 "50": {
-                    "vanilla_ms": 1.54,
-                    "grease_ms": 1.36,
-                    "delta_pct": -11.5
+                    "vanilla_ms": 1.64,
+                    "grease_ms": 1.48,
+                    "delta_pct": -9.6
                 },
                 "90": {
-                    "vanilla_ms": 1.58,
-                    "grease_ms": 1.41,
-                    "delta_pct": -10.8
+                    "vanilla_ms": 1.71,
+                    "grease_ms": 1.53,
+                    "delta_pct": -10.4
                 }
             }
         },
         {
             "key": "page-full",
             "label": "full page (extends layout, 5 sections, 100-row @foreach table, components)",
-            "vanilla_ms": 0.17,
-            "grease_ms": 0.16,
-            "delta_pct": -5.5,
+            "vanilla_ms": 0.16,
+            "grease_ms": 0.15,
+            "delta_pct": -8.7,
             "percentiles": {
                 "50": {
-                    "vanilla_ms": 0.17,
-                    "grease_ms": 0.16,
-                    "delta_pct": -5.5
+                    "vanilla_ms": 0.16,
+                    "grease_ms": 0.15,
+                    "delta_pct": -8.7
                 },
                 "90": {
-                    "vanilla_ms": 0.21,
-                    "grease_ms": 0.25,
-                    "delta_pct": 20.5
+                    "vanilla_ms": 0.18,
+                    "grease_ms": 0.22,
+                    "delta_pct": 23.5
                 }
             }
         }

@@ -180,9 +180,12 @@ build; "drop-in allocator" is a myth). And run-to-run under machine load swung g
 quote a single number as if it were portable.
 
 - **Blade render tier** (`blade.php`, 1,000 anonymous components, parity ✔): @props+merge,
-  **simple −38%, rich −29.5%** (vanilla 16.1/23.1 ms → 9.9/16.2 ms). (Mac read this as
-  −24–27%.) The remaining cost is the compiled-view body (~60–70%, mostly real template
-  work) — see Open/to-explore #10.
+  **simple −28%, rich −23%** (vanilla 15.7/22.0 ms → 11.3/16.9 ms). (Was −38%/−29.5% through
+  0.4.0, but that emit was *byte-divergent* — it skipped vanilla's scope-deferral and
+  cleanup, so an `@include('sub', [...])`-passed prop rendered its default; the 0.4.1 fix
+  restores both, and the now-mandatory cleanup loop is what costs the simple case ~10pp.)
+  The remaining cost is the compiled-view body (~60–70%, mostly real template work) — see
+  Open/to-explore #10.
 - **Real endpoints** (`realworld.php`, end-to-end incl. SQL, 3-run medians): index_users
   **−78%** (3.12 ms → 0.69 ms), posts_with_author **−77%** (6.0 → 1.4 ms), show_post **−47%**
   (113 → 60 µs), bulk_update **−18%** (7.25 → 5.9 ms). Endpoint `%`s held up well vs Mac
@@ -375,11 +378,14 @@ Roughly highest-leverage first.
       config is set before providers boot — but it poisons the macro. Keep view-tier wiring
       in `register`/lazy, or set `view.compiled` before booting the provider in benches.)
     - **Honest standing numbers (Linux, `benchmarks/docker`, JIT on):** @props+merge is
-      **simple −38% / rich −29.5%** (vanilla 16.1/23.1 ms → 9.9/16.2 ms). (Mac read this as
-      −24% — it understated the win.) Render self splits ≈ compiled-view body ~60–70%
+      **simple −28% / rich −23%** (vanilla 15.7/22.0 ms → 11.3/16.9 ms), post-0.4.1 — the
+      pre-0.4.1 −38%/−29.5% was a byte-divergent emit (skipped scope-deferral + cleanup; an
+      `@include`-passed prop rendered its default). Render self splits ≈ compiled-view body ~60–70%
       (mostly real work + the `Str::of` chain), then `e()`, `merge`, `Component::resolve`,
-      the Factory machinery; `is_file` ~3%. **The −33% goal is already met/exceeded by the
-      shipped tier on Linux** — no filesystem hack needed.
+      the Factory machinery; `is_file` ~3%. **The original −33% goal was met by the pre-0.4.1
+      tier, but that emit was byte-divergent; the corrected tier lands at −28%/−23%** — the gap
+      is the scope-cleanup loop byte-parity requires, not a filesystem hack. Closing it back
+      toward −33% means the component-resolution lever below, not a cheaper @props.
     - **Still open — component resolution (~15%, the real remaining lever).**
       `AnonymousComponent::resolve` + the Factory run a per-render factory/resolver lookup.
       Lever: cache resolution per component name. Behaviour-identical bar; risk is shared-
