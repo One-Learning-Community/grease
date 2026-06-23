@@ -26,6 +26,18 @@ use ReflectionMethod;
  */
 class HasGreasedClassAttributesParityTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // resolveClassAttribute() and the #[Table]/#[Fillable]/… attributes it reads are a
+        // newer-Laravel feature; on a framework without it the tier is inert (the override is
+        // never reached) and vanilla has no method to compare against. Skip there.
+        if (! method_exists(Model::class, 'resolveClassAttribute')) {
+            $this->markTestSkipped('Model PHP attributes require a newer Laravel; this tier is inert here.');
+        }
+    }
+
     /** Distinct attributes (no key collision) — cold path, property extraction, and absent. */
     public function test_resolve_matches_vanilla_across_a_battery(): void
     {

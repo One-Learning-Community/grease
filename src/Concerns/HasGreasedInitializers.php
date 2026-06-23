@@ -2,6 +2,11 @@
 
 namespace Grease\Concerns;
 
+use Illuminate\Database\Eloquent\Concerns\GuardsAttributes;
+use Illuminate\Database\Eloquent\Concerns\HasRelationships;
+use Illuminate\Database\Eloquent\Concerns\HasTimestamps;
+use Illuminate\Database\Eloquent\Concerns\HidesAttributes;
+
 /**
  * Tier — per-class init-state freeze for the four trait booters that survive the
  * other tiers' freezes.
@@ -54,7 +59,14 @@ trait HasGreasedInitializers
         $class = static::class;
 
         if (! isset(static::$greaseBlueprint[$class]['guardsInit'])) {
-            parent::initializeGuardsAttributes();
+            // The #[Initialize] attribute booters are a newer L11/L12 feature; on a
+            // framework that predates them this method exists only because *we* define
+            // it (so bootTraits() registers and calls it). There's no parent booter to
+            // call — snapshot the class defaults and behave exactly like vanilla, which
+            // simply has nothing to run here.
+            if (method_exists(GuardsAttributes::class, 'initializeGuardsAttributes')) {
+                parent::initializeGuardsAttributes();
+            }
 
             static::$greaseBlueprint[$class]['guardsInit'] = [$this->fillable, $this->guarded];
 
@@ -69,7 +81,9 @@ trait HasGreasedInitializers
         $class = static::class;
 
         if (! isset(static::$greaseBlueprint[$class]['hidesInit'])) {
-            parent::initializeHidesAttributes();
+            if (method_exists(HidesAttributes::class, 'initializeHidesAttributes')) {
+                parent::initializeHidesAttributes();
+            }
 
             static::$greaseBlueprint[$class]['hidesInit'] = [$this->hidden, $this->visible];
 
@@ -84,7 +98,9 @@ trait HasGreasedInitializers
         $class = static::class;
 
         if (! isset(static::$greaseBlueprint[$class]['timestampsInit'])) {
-            parent::initializeHasTimestamps();
+            if (method_exists(HasTimestamps::class, 'initializeHasTimestamps')) {
+                parent::initializeHasTimestamps();
+            }
 
             static::$greaseBlueprint[$class]['timestampsInit'] = [$this->timestamps];
 
@@ -99,7 +115,9 @@ trait HasGreasedInitializers
         $class = static::class;
 
         if (! isset(static::$greaseBlueprint[$class]['touchesInit'])) {
-            parent::initializeHasRelationships();
+            if (method_exists(HasRelationships::class, 'initializeHasRelationships')) {
+                parent::initializeHasRelationships();
+            }
 
             static::$greaseBlueprint[$class]['touchesInit'] = [$this->touches];
 

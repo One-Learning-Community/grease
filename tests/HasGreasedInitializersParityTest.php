@@ -26,6 +26,19 @@ use Illuminate\Database\Eloquent\Model;
  */
 class HasGreasedInitializersParityTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The four booters this tier freezes only exist on a framework with the model
+        // PHP-attribute feature (#[Fillable]/#[Table]/…). On an older Laravel the tier is
+        // inert (it defers to vanilla, which has nothing to run), so there's nothing to
+        // assert — skip rather than compare two no-ops.
+        if (! method_exists(Model::class, 'resolveClassAttribute')) {
+            $this->markTestSkipped('Model PHP attributes require a newer Laravel; this tier is inert here.');
+        }
+    }
+
     /** The full init-state surface the four booters write. */
     private function state(Model $m): array
     {
