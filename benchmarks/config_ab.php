@@ -28,6 +28,7 @@
 
 require __DIR__.'/../vendor/autoload.php';
 
+use Grease\Config\ConfigCacheCommand;
 use Grease\Config\Repository as GreasedRepository;
 use Illuminate\Config\Repository as VanillaRepository;
 
@@ -96,8 +97,12 @@ function readMix($c): array
 $vanRepo = new VanillaRepository(configItems());
 $greRepo = new GreasedRepository(configItems());
 
-if (var_export(readMix($vanRepo), true) !== var_export(readMix($greRepo), true)) {
-    echo "PARITY FAILED — read mix differs between vanilla and greased.\n";
+$flatRepo = new GreasedRepository(configItems());
+$flatRepo->useGreaseFlatIndex(ConfigCacheCommand::buildFlatIndex(configItems())['index']);
+
+if (var_export(readMix($vanRepo), true) !== var_export(readMix($greRepo), true)
+    || var_export(readMix($vanRepo), true) !== var_export(readMix($flatRepo), true)) {
+    echo "PARITY FAILED — read mix differs between vanilla and greased (memo or flat).\n";
     exit(1);
 }
 
@@ -172,3 +177,92 @@ printf("  delta:   %+.1f%%\n", $delta);
 echo "\nWarm steady-state config-read cost — what a worker pays once the memo is built, within a\n";
 echo "request (FPM and Octane alike; Octane clones config per request). Baseline is a config:cache'd\n";
 echo "(pre-merged) repo, so this is the win on top of the production standard. macOS — confirm on Linux.\n";
+
+// ---- First-touch (cold per request): the eager flat index's distinct win --------
+// A FRESH repo per read-mix = every key is first-touch, no cross-request warmup — the
+// per-request-cold pattern (every FPM request; every Octane sandbox clone, which resets the
+// lazy memo). The lazy memo can't help here (empty each time → it re-walks like vanilla); the
+// opcache-interned flat index (grease:config-cache) serves every leaf as a hash hit from read 1.
+$flatIndex = ConfigCacheCommand::buildFlatIndex(configItems())['index'];
+$coldIters = max(1, (int) ($iterations / 2));
+
+$timeFresh = function (callable $make) use ($coldIters): float {
+    $start = hrtime(true);
+    for ($i = 0; $i < $coldIters; $i++) {
+        readMix($make());
+    }
+
+    return (hrtime(true) - $start) / 1e9;
+};
+
+$rounds = 5;
+$cVan = $cLazy = $cFlat = 0.0;
+for ($r = 0; $r < $rounds; $r++) {
+    $cVan += $timeFresh(fn () => new VanillaRepository(configItems()));
+    $cLazy += $timeFresh(fn () => new GreasedRepository(configItems()));
+    $cFlat += $timeFresh(function () use ($flatIndex) {
+        $repo = new GreasedRepository(configItems());
+        $repo->useGreaseFlatIndex($flatIndex);
+
+        return $repo;
+    });
+}
+$cVan /= $rounds;
+$cLazy /= $rounds;
+$cFlat /= $rounds;
+
+printf("\nFirst-touch (fresh repo per mix), %s iters × %d rounds:\n", number_format($coldIters), $rounds);
+printf("  vanilla:      %.4f s  (%.3f µs/mix)\n", $cVan, $cVan / $coldIters * 1e6);
+printf("  greased lazy: %.4f s  (%+.1f%% — memo is empty each time, so ~vanilla)\n", $cLazy, ($cLazy - $cVan) / $cVan * 100);
+printf("  greased flat: %.4f s  (%+.1f%% — every leaf a hash hit, no warmup)\n", $cFlat, ($cFlat - $cVan) / $cVan * 100);
+echo "\nThe flat index (grease:config-cache) is the lever for the per-request-cold case the lazy\n";
+echo "memo can't reach. Construction cost is identical across arms, so the delta is the read win.\n";
+
+// ---- Per-read latency (warm): the optimized path must beat the current mechanism --
+// Isolates ONE leaf read, warm, so there's no construction/warmup noise: vanilla dot-walk
+// vs warm lazy-memo hit vs flat-index hit. Answers "is the flat path < vanilla, and does its
+// extra branch regress the warm memo hit it front-ends?" — and the no-index case (flat branch
+// short-circuits on null) must not regress a greased-but-not-cached app.
+$key = 'database.connections.mysql.host';
+$rVanilla = new VanillaRepository(configItems());
+$rMemo = new GreasedRepository(configItems());
+$rMemo->get($key); // warm the memo hit
+$rNoIndex = new GreasedRepository(configItems());
+$rNoIndex->get($key); // greased, no flat index (the null-branch path)
+$rFlat = new GreasedRepository(configItems());
+$rFlat->useGreaseFlatIndex($flatIndex);
+
+$perN = 5_000_000;
+for ($i = 0; $i < 200_000; $i++) {
+    $rVanilla->get($key);
+    $rMemo->get($key);
+    $rFlat->get($key);
+    $rNoIndex->get($key);
+}
+$perRead = function ($repo) use ($key, $perN): float {
+    $start = hrtime(true);
+    for ($i = 0; $i < $perN; $i++) {
+        $repo->get($key);
+    }
+
+    return (hrtime(true) - $start) / $perN; // ns/read
+};
+
+$nVan = $nMemo = $nNoIdx = $nFlat = 0.0;
+for ($r = 0; $r < 5; $r++) {
+    $nVan += $perRead($rVanilla);
+    $nMemo += $perRead($rMemo);
+    $nNoIdx += $perRead($rNoIndex);
+    $nFlat += $perRead($rFlat);
+}
+$nVan /= 5;
+$nMemo /= 5;
+$nNoIdx /= 5;
+$nFlat /= 5;
+
+printf("\nPer-read latency, warm '%s' × %s × 5 rounds:\n", $key, number_format($perN));
+printf("  vanilla Arr::get walk:   %5.1f ns  (current mechanism)\n", $nVan);
+printf("  greased, no flat index:  %5.1f ns  (%+.1f%% vs vanilla — lazy memo + null-branch)\n", $nNoIdx, ($nNoIdx - $nVan) / $nVan * 100);
+printf("  greased, warm memo hit:  %5.1f ns  (%+.1f%% vs vanilla)\n", $nMemo, ($nMemo - $nVan) / $nVan * 100);
+printf("  greased, flat-index hit: %5.1f ns  (%+.1f%% vs vanilla · %+.1f%% vs warm memo)\n", $nFlat, ($nFlat - $nVan) / $nVan * 100, ($nFlat - $nMemo) / $nMemo * 100);
+echo "Every greased path must sit below vanilla; the flat hit is the optimized path's floor.\n";

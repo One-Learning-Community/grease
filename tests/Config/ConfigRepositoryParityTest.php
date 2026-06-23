@@ -2,8 +2,10 @@
 
 namespace Grease\Tests\Config;
 
+use Grease\Config\ConfigCacheCommand;
 use Grease\Config\Repository as GreasedRepository;
 use Illuminate\Config\Repository as VanillaRepository;
+use Illuminate\Support\Arr;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -330,5 +332,118 @@ class ConfigRepositoryParityTest extends TestCase
         // The explicit hook recovers it.
         $gre->flushConfigMemo();
         $this->assertSame('OutOfBand', $gre->get('app.name'));
+    }
+
+    // --- Eager flat-index fast path (grease:config-cache) -------------------------
+
+    /** A greased repo wired with the flat index the command would produce for self::items(). */
+    private static function flatGreased(): GreasedRepository
+    {
+        $repo = new GreasedRepository(self::items());
+        $repo->useGreaseFlatIndex(ConfigCacheCommand::buildFlatIndex(self::items())['index']);
+
+        return $repo;
+    }
+
+    /**
+     * Every read shape must still match vanilla with the flat index installed — leaf reads
+     * take the fast path, whole-array/missing/getMany/has/all fall through unchanged.
+     */
+    #[DataProvider('probeMatrix')]
+    public function test_read_with_flat_index_matches_vanilla(callable $probe): void
+    {
+        $this->assertSame(
+            var_export($probe(new VanillaRepository(self::items())), true),
+            var_export($probe(self::flatGreased()), true),
+        );
+    }
+
+    /** A write taints the index for the rest of the request → reads serve LIVE values. */
+    public function test_flat_index_taints_on_write(): void
+    {
+        $sequence = function ($c) {
+            $c->get('app.name');                 // fast-path read (greased)
+            $c->set('app.name', 'Changed');      // taints the index
+            $c->set('cache.default', 'array');
+
+            return [$c->get('app.name'), $c->get('cache.default'), $c->get('app.timezone'), $c->get('app')];
+        };
+
+        $this->assertSame(
+            var_export($sequence(new VanillaRepository(self::items())), true),
+            var_export($sequence(self::flatGreased()), true),
+        );
+    }
+
+    /** Octane sandbox: a clone inherits the flat index; tainting the clone never hits the base. */
+    public function test_flat_index_clone_is_octane_safe(): void
+    {
+        $sequence = function ($base) {
+            $base->get('app.name');
+            $sandbox = clone $base;              // Octane's per-request config clone
+            $sandbox->set('app.name', 'SandboxOnly');
+
+            return [
+                'sandbox.name' => $sandbox->get('app.name'),
+                'sandbox.tz' => $sandbox->get('app.timezone'),
+                'base.name' => $base->get('app.name'),       // base index untouched
+                'base.tz' => $base->get('app.timezone'),
+            ];
+        };
+
+        $van = new VanillaRepository(self::items());
+        $this->assertSame(
+            var_export($sequence($van), true),
+            var_export($sequence(self::flatGreased()), true),
+        );
+    }
+
+    /**
+     * The build-time guarantee: every entry the index contains equals `Arr::get` — including
+     * across the literal-dotted-key collision, where the ambiguous key is dropped.
+     */
+    public function test_build_flat_index_never_disagrees_with_vanilla(): void
+    {
+        $configs = [
+            'realistic' => self::items(),
+            'literal-vs-nested' => ['a.b' => 'literal', 'a' => ['b' => 'nested']],
+            'deep collision' => ['x' => ['y' => ['z' => 1]], 'x.y.z' => 2],
+        ];
+
+        foreach ($configs as $label => $config) {
+            foreach (ConfigCacheCommand::buildFlatIndex($config)['index'] as $key => $value) {
+                $this->assertSame(Arr::get($config, $key), $value, "[$label] index[$key] must equal Arr::get");
+            }
+        }
+    }
+
+    /** The written file (`<?php return var_export(...)`) round-trips and drives a parity-correct repo. */
+    public function test_flat_index_file_round_trips(): void
+    {
+        $index = ConfigCacheCommand::buildFlatIndex(self::items())['index'];
+
+        $tmp = tempnam(sys_get_temp_dir(), 'grease_flat').'.php';
+        file_put_contents($tmp, '<?php return '.var_export($index, true).';'.PHP_EOL);
+        $loaded = require $tmp;
+        @unlink($tmp);
+
+        $this->assertSame($index, $loaded, 'var_export round-trip must be identical');
+
+        $repo = new GreasedRepository(self::items());
+        $repo->useGreaseFlatIndex($loaded);
+        $this->assertSame('Grease', $repo->get('app.name'));
+        $this->assertNull($repo->get('services.stripe.key'));
+    }
+
+    /** The index holds scalar/null leaves only — not whole arrays or array-valued leaves. */
+    public function test_build_flat_index_is_leaf_only(): void
+    {
+        $index = ConfigCacheCommand::buildFlatIndex(self::items())['index'];
+
+        $this->assertArrayHasKey('app.name', $index);
+        $this->assertArrayHasKey('services.stripe.key', $index); // stored null IS a leaf
+        $this->assertNull($index['services.stripe.key']);
+        $this->assertArrayNotHasKey('app', $index);               // whole array
+        $this->assertArrayNotHasKey('app.providers', $index);     // array-valued leaf
     }
 }

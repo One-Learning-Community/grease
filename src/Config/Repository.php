@@ -69,6 +69,35 @@ class Repository extends BaseRepository
     protected array $greaseConfigMemo = [];
 
     /**
+     * An eager, parity-verified leaf-key index (`'a.b.c' => scalar`) precomputed by
+     * `grease:config-cache` and loaded from an opcache-interned file. When present, a leaf
+     * read is a single `array_key_exists` hit with no dot-walk and no warmup — built on the
+     * base repo, so an Octane clone COW-inherits it, and SHM-interned, so FPM loads it ~free.
+     * `null` when no index is loaded (the lazy memo is the fallback for every read).
+     *
+     * @var array<string, scalar|null>|null
+     */
+    protected ?array $greaseConfigFlat = null;
+
+    /**
+     * Set once any write happens this request — the flat index is then stale, so reads fall
+     * back to the live lazy-memo/`Arr::get` path. Per-instance (and Octane clones are
+     * per-request), so it self-resets every request.
+     */
+    protected bool $greaseConfigTainted = false;
+
+    /**
+     * Install a precomputed leaf-key flat index (see {@see $greaseConfigFlat}). Called by
+     * {@see GreaseConfigServiceProvider} when a fresh `grease:config-cache` artifact exists.
+     *
+     * @param  array<string, scalar|null>  $flat
+     */
+    public function useGreaseFlatIndex(array $flat): void
+    {
+        $this->greaseConfigFlat = $flat;
+    }
+
+    /**
      * Build a greased repository carrying over an existing repository's items — the swap
      * seam used by {@see GreaseConfigServiceProvider} (the events `fromBase()` precedent).
      */
@@ -90,6 +119,16 @@ class Repository extends BaseRepository
         // are rare and defer to vanilla untouched.
         if (! is_string($key)) {
             return Arr::get($this->items, $key, $default);
+        }
+
+        // Eager flat-index fast path: an untainted leaf read is one hash hit, no dot-walk.
+        // Verified === Arr::get at build time, and skipped once any write taints it, so the
+        // value is byte-identical to vanilla. Non-leaf/whole-array/missing keys aren't in the
+        // index → fall through to the lazy memo. Cheap null-check when no index is loaded.
+        if ($this->greaseConfigFlat !== null
+            && ! $this->greaseConfigTainted
+            && array_key_exists($key, $this->greaseConfigFlat)) {
+            return $this->greaseConfigFlat[$key];
         }
 
         if (array_key_exists($key, $this->greaseConfigMemo)) {
@@ -126,13 +165,17 @@ class Repository extends BaseRepository
     }
 
     /**
-     * Drop the entire read memo. `set()` already calls this, so for set()-routed mutations
-     * the memo stays consistent with `$items` automatically. Call it explicitly only after
-     * an out-of-band `$items` mutation (a macro or reflection write — the documented
-     * carve-out), or to force a clean memo. Cheap when the memo is already empty.
+     * Drop the entire read memo and taint the flat index. `set()` already calls this, so for
+     * set()-routed mutations both caches stay consistent with `$items` automatically. Call it
+     * explicitly only after an out-of-band `$items` mutation (a macro or reflection write —
+     * the documented carve-out), or to force a clean memo. Tainting the flat index for the
+     * rest of the request is correct because, once config has been mutated, the precomputed
+     * index no longer reflects `$items` (the live lazy-memo/`Arr::get` path does). Cheap when
+     * already clean; the per-instance taint self-resets next request (Octane clones are fresh).
      */
     public function flushConfigMemo(): void
     {
         $this->greaseConfigMemo = [];
+        $this->greaseConfigTainted = true;
     }
 }
