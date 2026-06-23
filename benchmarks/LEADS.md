@@ -161,6 +161,27 @@ This is the one true multiplier on the HTTP axis (the per-call repetition Eloque
 - **Morning:** build `input_ab.php` + parity test, then resolve the delivery seam (it
   decides how the whole HTTP axis ships).
 
+> **✅ BUILT & MEASURED (2026-06-23).** Tier shipped: `src/Http/{MemoizesRequestInput,
+> Request}`. Memoizes the `input()`/`all()` merged base arrays + the `isJson()` bool
+> per-instance; flushes on `merge`/`mergeIfMissing`/`replace`/`offsetSet`/`offsetUnset`/
+> `setJson`. Direct-bag-mutation + `setMethod`-after-read are the documented carve-out.
+> Parity green — `RequestInputParityTest` (57 tests, oracle = vanilla) across GET/POST/JSON
+> shapes × the full accessor matrix (`input`/dot/default/`all`/`has`/`only`/`except`/
+> `filled`/`__get`/`offsetGet`/`keys`/`isJson`) **and** every read→mutate→read invalidation
+> sequence.
+>
+> **Measured (macOS, needs Linux confirm):** **−48.2%** on a fresh request + ~17-accessor
+> mix (`input_ab.php`) — and that *includes* identical construction cost in both arms, so
+> the isolated access win is larger. Far bigger than the container tier: `input()`/`all()`
+> are a true per-request multiplier (and `only`/`except`/`has`/`filled` each re-call them
+> internally, so vanilla rebuilds the merged array well over 17× per request).
+>
+> **Verdict:** the strongest foundation-axis lever found — a real, large, byte-identical
+> per-request win on every input-touching endpoint (controllers, validation, middleware).
+> **Delivery:** `Grease\Http\Request::capture()` in `public/index.php` (`capture()` builds
+> via `static`, so the greased class propagates). Heavier opt-in than a model trait, but
+> one line, and it's where the win is.
+
 ---
 
 ### 🟡 Secondary — real work, but once-per-request / low-µs / Octane-leaning
