@@ -51,6 +51,28 @@ trait HasGreasedHydration
     }
 
     /**
+     * Short-circuit the empty fill that `__construct` runs on every `new` model (and
+     * therefore every hydrated row, via `newFromBuilder`'s `new static`).
+     *
+     * `fill([])` is pure waste: it still computes `totallyGuarded()` and
+     * `fillableFromArray([])` up front, then loops over nothing and skips the discard
+     * check (`count([]) !== count([])` is false). On the eager-load profile that
+     * up-front `totallyGuarded()` is the single dominant self-time frame once the
+     * `resolveClassAttribute` calls are frozen out — paid once per hydrated row for a
+     * call that provably does nothing. Returning early on `[]` is byte-identical
+     * (`fill([])` has no side effect and returns `$this`); any non-empty fill defers to
+     * vanilla untouched. A model that overrides `fill()` shadows this entirely.
+     */
+    public function fill(array $attributes)
+    {
+        if ($attributes === []) {
+            return $this;
+        }
+
+        return parent::fill($attributes);
+    }
+
+    /**
      * Slim hydration: __construct already applied the blueprint (table, casts,
      * connection defaults), so skip newInstance()'s redundant setTable /
      * mergeCasts(self-merge) / fill([]) / second setConnection.

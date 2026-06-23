@@ -639,6 +639,25 @@ Roughly highest-leverage first.
         mutation after init / unguard static orthogonality / user-trait initializer coexistence) —
         oracle = vanilla getters. 299 tests / 751 assertions. Profiler: `benchmarks/eager_excimer.php`;
         A/B harness: `benchmarks/initializers_ab.php`.
+    - ✅ **SHIPPED follow-on: empty-fill short-circuit** (in `HasGreasedHydration`). Freezing the
+      booters made `totallyGuarded` the eager profile's new #1 at **~27.6% self** — and the profile
+      handed us *why*: it's only called from `fill()`, and `__construct` runs `$this->fill([])` on
+      every `new` model (so every hydrated row, via `newFromBuilder`'s `new static`). `fill([])` is
+      provably a no-op — `fillableFromArray([])` is `[]`, the loop is empty, the discard guard is
+      `count([]) !== count([])` (false) — yet vanilla still computes `totallyGuarded()` and
+      `fillableFromArray([])` up front. `if ($attributes === []) return $this;` deletes that work
+      byte-identically (a class-level `fill()` override shadows it; non-empty fills defer to
+      `parent::`). **`totallyGuarded` drops out of the top frames entirely** (`enum_value` is the
+      next revealed #1); tier-isolated A/B (`benchmarks/fill_ab.php`, vanilla-fill vs short-circuit,
+      parity-gated, mean of 3): **−5.2%** on the 2,000-child eager `get()`. `realworld` held
+      (index_users −79.0%, parity green). Pinned by `HasGreasedFillParityTest` (empty no-op returns
+      `$this` / empty under `preventSilentlyDiscardingAttributes` doesn't throw / non-empty respects
+      fillable / totally-guarded non-empty still throws). 303 tests / 759 assertions.
+    - **Next revealed lever (not built):** with `totallyGuarded` gone, `Illuminate\Support\enum_value`
+      is the eager profile's #1 (~32% self). It's the enum-cast read path (already accelerated by
+      `HasGreasedCasts`' enum fast path, which *delegates* conversion to the framework — i.e. to
+      `enum_value`). Worth a measure-first look at whether the delegation can be tightened without
+      losing byte-identity, or whether it's irreducible framework work. Its own session.
 
 ## Shipping checklist
 - [ ] Push remote `onelearningcommunity/grease`; confirm the CI matrix goes green

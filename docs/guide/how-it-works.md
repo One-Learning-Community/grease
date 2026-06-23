@@ -37,7 +37,7 @@ that doesn't use it.
 
 | Tier | What it computes once instead of every time |
 | --- | --- |
-| **`HasGreasedHydration`** | Kills the per-row `ReflectionClass`, the per-instance casts rebuild, and `newInstance`'s redundant work during hydration. |
+| **`HasGreasedHydration`** | Kills the per-row `ReflectionClass`, the per-instance casts rebuild, and `newInstance`'s redundant work during hydration — plus an empty-fill short-circuit: `fill([])` (run by `__construct` on every hydrated row) is a pure no-op, but vanilla still computes `totallyGuarded()` up front. Returning early on `[]` deletes that frame byte-identically. **−5.2% on the eager `get()`.** |
 | **`HasGreasedAttributes`** | Memoizes `getCasts` / `getCastType` / `getDates` / mutator probes / `getDateFormat` — the class-pure metadata Eloquent re-derives constantly. |
 | **`HasGreasedClassAttributes`** | Caches `resolveClassAttribute` (the `#[Table]` / `#[Fillable]` / `#[Hidden]` / `#[Appends]` / … lookups the per-instance `initialize*` booters run ~13× per `new` model) by a concat-free `[class][attribute]` key instead of vanilla's freshly-built `"$class@$attr"` string — **−13% on an eager-load `get()`**. |
 | **`HasGreasedInitializers`** | Freezes the four surviving `initialize*` trait booters (guards / hides / timestamps / touches) per class: cold path runs `parent::` once and snapshots the resulting properties; warm instances apply the snapshot by copy, skipping the `resolveClassAttribute` calls entirely. After the cache above made each call cheap, this kills the call *frequency* — `resolveClassAttribute` drops out of the eager profile's top frames. **−8.4% on the eager `get()`, on top of the tier above.** |
