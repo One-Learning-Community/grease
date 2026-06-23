@@ -61,6 +61,8 @@ export default defineConfig({
             { text: 'The Method', link: '/guide/method' },
             { text: 'The Event Dispatcher', link: '/guide/events' },
             { text: 'Blade Components', link: '/guide/blade' },
+            { text: 'The Container', link: '/guide/container' },
+            { text: 'The Request', link: '/guide/request' },
           ],
         },
         {

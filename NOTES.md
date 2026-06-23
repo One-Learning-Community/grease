@@ -811,3 +811,73 @@ the **framework repo** (`../../framework`, i.e. laravel/framework fork):
   one of several caches → stale *partial* state. One keyed store fixes that.
 - **Parity is the spine.** The 89-test suite + benchmark probes assert byte-identical
   vs vanilla. That's what lets someone drop it into a 200-model app without auditing.
+
+---
+
+## The foundation axis — beyond the model (2026-06-23)
+
+A new front, opened from an overnight research sweep (`benchmarks/LEADS.md`): the
+per-request *foundation* hot paths — the application container and the HTTP request —
+rather than the model. Two tiers shipped, both byte-/behaviour-identical, both opt-in.
+
+**The framing that held up.** Eloquent/Blade gave leverage because their work is a
+*multiplier* (per-row × per-attr, per-component). The request *spine* is mostly O(1)/
+request, so most of this territory is thin in classic FPM. The research predicted exactly
+two levers would clear the bar, and measurement confirmed it.
+
+### Container — constructor blueprint (`Grease\Container\*`)
+Vanilla `Container::build()` rebuilds class-pure reflection on every transient resolve.
+The blueprint freezes it per concrete; caches *reflection, not resolution* (contextual /
+`$with` / late rebinds stay live). **−38.8%/resolve** (Linux) but only **~−5% boot /
+−5.4→−7.9% dispatch** end-to-end — resolution is a thin slice of a request. Honest verdict:
+a compounding tier, the whole story under Octane, NOT a standalone headline. Opt-in is
+heavier than a trait — the container builds itself pre-provider, so it's a `bootstrap/app.php`
+class swap (`configure()` uses `new static`). Parity: `BlueprintParityTest` (12 build-path
+shapes incl. contextual/variadic/`$with`/rebind/throws) + `BootParity` (Testbench,
+byte-identical served response).
+
+### Request — input memoization (`Grease\Http\*`)
+The strongest foundation lever. Vanilla `input()`/`all()` rebuild the merged input map on
+every call, and `__get`/`has`/`only`/`except`/`filled` all re-funnel through them. Memoize
+the base arrays + `isJson()` per instance. **−41%/request** (Linux, ~17-accessor mix incl.
+construction). Opt-in: `Grease\Http\Request::capture()` in `public/index.php`.
+
+**Invalidation audit (the part that mattered most — review-driven).** First cut only
+flushed the value mutators (`merge`/`replace`/`offsetSet`/`offsetUnset`/`setJson`). The
+audit found three lifecycle gaps: `__clone()`/`duplicate()` (clone copies the memo, then
+duplicate swaps bags — and `duplicate()` is on the route:cache hot path → a genuine
+production bug, the copied memo returned the pre-duplicate input), `setMethod()` (rewrites
+`REQUEST_METHOD`, flipping the query/request input source), and `initialize()`. All fixed +
+pinned; verified the tests fail without the fix. Per-bag audit: the carve-out is precisely
+the input-source bags (`query`/`request`/`json`); `attributes` (middleware
+`$request->attributes->set()`) and `cookies` are outside the surface and fully safe; `files`
+is parity-equivalent (vanilla caches `convertedFiles` too). Considered forcing the bag
+accessors private to enforce the carve-out — impossible (PHP forbids narrowing inherited
+visibility; 8.4 hooked props reject `private(set)`) and wouldn't help anyway (the leak is a
+method call on the bag object, not property access). Documented as a deliberate boundary.
+
+### The cumulative-stack flagship (`benchmarks/stack_pipeline.php`)
+A real request through the kernel — 4 realworld shapes × {JSON, Blade} — measured with each
+tier layered in least→riskiest: vanilla → +models → +events → +blade → +container → +request.
+Three consumers off one shared fixture set (`tests/Fixtures/Pipeline/PipelineHarness`): the
+narrative report, `StackPipelineParityTest` (CI byte-identity, 8 routes × 6 levels), and
+`StackPipelineBench` (phpbench). Each level boots its own process (the container level needs
+a different `Application` class); write routes parity-probed in a rolled-back transaction;
+greased vs vanilla Blade compilers get per-level compiled-view dirs (different compiled PHP,
+same output).
+
+**Linux results.** The stacking is visible where each tier pays: blade routes
+`index_users.blade` −14% (models) → **−33% (blade lands)** → −41% (container); JSON routes
+models-dominated (−84%), other tiers marginal (no Blade in JSON). Full 8-route page-load
+suite (phpbench): **38.5ms → 20.4ms, ~−47%**. **Memory: +2.3% retained for all six tiers
+(~0.25 MB), peak ~flat** — the caches are nearly free against a request's working set. The
+memory question answered clear-eyed: layering the caches costs almost nothing.
+
+### Method notes
+- The boot spike de-risk pattern: a `resolveApplication()` override on Testbench's resolver
+  to boot a fully-configured app on the greased `Application` outside PHPUnit; subprocess-
+  per-arm for isolation + clean memory readings.
+- Memory granularity: `memory_get_peak_usage(true)` is chunk-rounded and hid the cache cost
+  (read flat); `memory_get_usage(false)` (emalloc, retained-after-gc) surfaces it.
+- The repo already had the "phpbench drives a Testbench PHPUnit case" pattern
+  (`SuiteBench`/`DrivesTestSuite`) — the stack bench follows it.

@@ -42,6 +42,21 @@ Grease\Events\GreaseEventServiceProvider::class,   // faster event dispatcher, a
 Grease\View\GreaseViewServiceProvider::class,      // faster Blade component render
 ```
 
+Two further **foundation** tiers go deeper into the request lifecycle. They can't be a
+provider (they're constructed before any provider runs), so each is a one-line swap at the
+application's own entry point — the most invasive opt-in, taken only if you want it:
+
+```php
+// bootstrap/app.php — greased container (faster dependency resolution)
+return Grease\Container\Application::configure(basePath: dirname(__DIR__))/* …->create() */;
+
+// public/index.php — greased request (memoized input() / all())
+$request = Grease\Http\Request::capture();
+```
+
+See [The Container](https://one-learning-community.github.io/grease/guide/container) and
+[The Request](https://one-learning-community.github.io/grease/guide/request).
+
 ## What you get
 
 Representative deltas, measured on Linux ([reproduce on your own build](https://one-learning-community.github.io/grease/guide/benchmarks) — one command):
