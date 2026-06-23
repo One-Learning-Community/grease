@@ -49,7 +49,7 @@ Representative deltas, measured on Linux ([reproduce on your own build](https://
 - **End-to-end requests (incl. SQL):** −78% list-100-users, −77% eager-load, −47% show, −18% bulk write.
 - **Per operation:** hydrate −34%, `toArray` −47%, set+dirty −39%, read −27%, enum −48%, date serialization −87%.
 - **Event dispatcher** (app-wide): −53% no-listener dispatch, ~halves a render-dense request's event overhead.
-- **Blade** (Taylor's 1,000-component challenge): −38% simple / −29.5% rich, byte-identical HTML.
+- **Blade** (render path, app-wide): −38.9% simple / −29.9% rich component renders, −27.8% a `$loop`-heavy table, −19.4% a layout — byte-identical HTML.
 
 These are `:memory:`/Linux figures — read them as Grease's share of the work, not your p99,
 and reproduce on your target. The [Benchmarks guide](https://one-learning-community.github.io/grease/guide/benchmarks)

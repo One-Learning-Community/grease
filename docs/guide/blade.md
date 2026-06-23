@@ -1,8 +1,8 @@
 # Blade Components
 
 A *third axis*, like the [dispatcher](/guide/events): not a per-model trait but the
-**Blade render path**. The traits make models faster; this makes the components every
-page renders faster — byte-for-byte the same HTML.
+**Blade render path**. The traits make models faster; this makes the views every page
+renders faster — byte-for-byte the same HTML.
 
 ## The challenge
 
@@ -15,13 +15,28 @@ It starts with a [tweet Taylor posted in April 2024](https://x.com/taylorotwell/
 We've been chewing on *reliably* trimming that number ever since — on and off for two
 years. "Reliably" is the whole game: it's easy to shave a render by changing what it
 emits; the bar here is the same as everywhere else in Grease — **byte-identical output**,
-asserted before any number is timed. And the honest framing up front: this is **one
-challenge of limited breadth**, not a Blade overhaul.
+asserted before any number is timed. And the honest framing up front: this isn't a Blade
+overhaul. It's a *pile of marginal, byte-identical wins* — the same shape as the rest of
+the package — each one a thing core would wave off in isolation, that compounds once
+they're all on the page.
+
+## Two singletons, two surfaces
+
+The provider swaps **two** bound singletons for greased, behaviour-identical drop-ins
+(both built via a `fromBase()` reflection-clone that carries the existing instance's full
+state, so the swap is transparent):
+
+- **`blade.compiler` → [`Grease\View\Compiler`](https://github.com/One-Learning-Community/grease/blob/main/src/View/Compiler.php)** — the *compile-time* emit and a
+  couple of per-render lookups the compiler owns.
+- **`view` → [`Grease\View\Factory`](https://github.com/One-Learning-Community/grease/blob/main/src/View/Factory.php)** — the *runtime* render bookkeeping the
+  view factory drives (`@foreach`'s `$loop`, `@yield`'s content stitching).
 
 ## What it does
 
-Every component, on every render, pays two costs that don't depend on the data. Grease
-greases exactly those two:
+Six wins ride on those two singletons. Each replaces work every page repeats — work that
+doesn't depend on your data — with a tighter path that emits the identical bytes.
+
+**On the compiler (`blade.compiler`):**
 
 - **`@props` resolution.** Vanilla compiles `@props([...])` to a block that, on each
   render, rebuilds a flat name list, scans it with `in_array` (a linear walk per
@@ -32,44 +47,108 @@ greases exactly those two:
 - **`$attributes->merge([...])`.** Nearly every component template calls it. Vanilla runs
   it through the Collection pipeline — `new Collection`, `partition()`, `mapWithKeys()`,
   `->merge()`, `->all()`, roughly five allocations a render. Grease does the identical
-  partition + append in two plain `foreach` loops, no Collections. It's a subclass of
-  the framework's own `ComponentAttributeBag` (so every `instanceof` check still holds),
-  handed to the component by `Props::mergeAttributes()`; `merge()` returns `new static`,
-  so the fast path stays live down any chain.
+  partition + append in two plain `foreach` loops, no Collections. It's a subclass of the
+  framework's own `ComponentAttributeBag` (so every `instanceof` check still holds), and
+  `merge()` returns `new static`, so the fast path stays live down any chain.
+- **Greased bag for class components, too.** The greased bag reaches `@props` components
+  for free (via `Props::mergeAttributes`), but plain class and no-`@props` components build
+  a *vanilla* bag through `Component::newAttributeBag()` — so their template merge took the
+  slow Collection path. The catch: the opening boilerplate hands the template its bag (via
+  `data()` inside `startComponent`) *before* `withAttributes` populates it, so you can't
+  reclass it after. The fix is one emitted line — Grease overrides the
+  `compileClassComponentOpening` emit to seed
+  `$component->attributes ??= new \Grease\View\ComponentAttributeBag([])` *before*
+  `startComponent`, which `data()`'s `?:` then adopts. Byte-identical (an empty seed equals
+  vanilla's lazy `newAttributeBag()`; the `??=` preserves a constructor-set bag).
+- **`getCompiledPath()` memoization.** The compiled-file path is a pure
+  `hash('xxh128', …)` of the view path — and it's recomputed on *every* view render
+  (`CompilerEngine::get`), which on a real page is a tree of renders (every component,
+  slot, `@include`, `@each` is one). The framework already memoizes this lookup's siblings
+  (`normalizeName`, `getEngineFromPath`) but missed this one. Grease memoizes it keyed by
+  path. It scales *with* render count, so it helps realistic pages most — the opposite of
+  the `@props`/`merge` dilution below.
+
+**On the view factory (`view`):**
+
+- **`@foreach`'s `$loop` bookkeeping.** Blade emits full `$loop` state for every
+  `@foreach`, even when the body never touches `$loop`. The machinery
+  (`ManagesLoops` — `addLoop`/`incrementLoopIndices`/`getLastLoop`) is ~35% of a
+  loop-heavy render: `incrementLoopIndices` `array_merge`s the 10-key state array *every
+  iteration*, and the others reach the stack top through `Arr::last` (closure-default
+  overhead). Grease updates the state **in place by reference** (no merge) and uses a
+  direct stack index. Byte-identical — same loop-state shape, and `getLastLoop` keeps its
+  *fresh* `(object)` cast every call (a micro proved reusing one object is both unsafe
+  *and* ~10% slower, so there's no tension).
+- **`@yield` / `yieldContent`.** `@yield('content')` hands the whole page body to
+  `yieldContent`, which vanilla scans **three times** with `str_replace` (`@@parent` →
+  marker, strip the placeholder, marker → `@parent`) — 29% of a layout render's self-time.
+  The net is one substitution over three *non-overlapping* markers, and neither pass
+  re-scans its own output, so Grease collapses all three into one
+  `preg_replace_callback` over the alternation. Byte-identical, proven against a verbatim
+  three-pass oracle.
 
 ## Byte-identical, by test
 
 Same bar as the model tiers: the rendered HTML is **identical to the byte**. The macro
 ([`benchmarks/blade.php`](https://github.com/One-Learning-Community/grease/blob/main/benchmarks/blade.php))
-renders Taylor's exact loop through the stock compiler and the greased one in two booted
-apps with separate compiled-view caches, and asserts the HTML matches *before* it times
-anything. Execution-level tests pin the pieces: the `@props` emit resolves the same prop
-variables and leaves the same attributes as vanilla (down to the inaccessible kebab-alias
-local vanilla also creates), and the greased `merge()` produces the same attribute array
-and string across class/style appends, escaping, `AppendableAttributeValue`, ordering, and
-the forwarded-bag `sanitizeComponentAttribute` guard.
+now has **seven parity-gated variants** — `page-simple`, `page-foreach`, `page-rich`,
+`page-rich-foreach`, `page-app`, `page-table`, `page-layout` — each rendered through the
+stock compiler and the greased one in two booted apps with separate compiled-view caches,
+and each asserts the HTML matches *before* it times anything. The variety is the point: the
+right fixture surfaces the lever (`page-table` is what surfaced the `@foreach` cost;
+`page-layout` surfaced `@yield`). Execution-level tests pin every piece down — the `@props`
+emit resolves the same prop variables and leaves the same attributes (down to the
+inaccessible kebab-alias local vanilla also creates); the greased `merge()` matches across
+class/style appends, escaping, `AppendableAttributeValue`, and ordering; the loop tier
+matches across countable / single / non-countable-generator / nested-with-parent; and
+`yieldContent` is checked against its three-pass oracle across plain, marker, adjacency,
+and pathological inputs.
 
 ## What it's worth
 
-On Taylor's exact challenge — 1,000 anonymous components, output asserted identical
-(Linux, [`benchmarks/docker`](/guide/benchmarks#a-benchmark-is-a-property-of-the-build)):
+On the parity-gated macro variants (Linux,
+[`benchmarks/docker`](/guide/benchmarks#a-benchmark-is-a-property-of-the-build), output
+asserted identical):
 
-| Component shape | Δ |
-| --- | :---: |
-| simple (initials + one attribute merge) | **−38%** |
-| rich (5 props, a `@php` block, conditionals, slots) | **−29.5%** |
+| Variant | What it stresses | Δ |
+| --- | --- | :---: |
+| simple | initials + one attribute merge | **−38.9%** |
+| rich | 5 props, a `@php` block, conditionals, slots | **−29.9%** |
+| app page | class components, slots, `@include`/`@each`, a view composer | **−21.4%** |
+| data table | nested `@foreach`, heavy `$loop` use | **−27.8%** |
+| layout | `@extends` / `@section` / `@yield` / `@push` | **−19.4%** |
+
+The `@foreach` variants (`page-foreach`, `page-rich-foreach`) render Taylor's avatar
+challenge in the *realistic* loop form, and land on the same ~−39% / ~−30% as their `@for`
+counterparts — confirming the tiers compose with zero regression.
+
+::: tip The regime insight — which fixture wins on which tier
+The wins split by **what the loop body costs**, and that's worth knowing when you reason
+about your own pages. Loop / `$loop` greasing pays when the body is *cheap* — data-table
+cells, lists, menus — where the per-iteration machinery (~0.1 µs) is a real fraction of
+each pass; on a component loop the body (~15 µs an iteration) dwarfs it, so component
+greasing (`@props` + `merge`) is what moves the needle there instead. Neither tier
+regresses the other — they just light up on different shapes. So a component-dense page
+leans on the compiler tier and a table-dense page leans on the factory tier, and a page
+with both gets both.
+:::
 
 Not the halving Taylor asked for, and worth saying plainly. The rest of a render is the
 compiled template *executing* (real work — your markup, the `Str` calls) plus the
-per-component resolution machinery, and we haven't found a **clean, parity-safe** win in
-that machinery yet. We've measured several and rejected them — replacing `extract()` with
-a bind loop (a regression: `extract` is a C builtin, ~2× faster than userland), and
-caching `is_file()` (a macOS profiling artifact that's ~3% on Linux, and the wrong thing
-on principle). Those dead ends are recorded openly in the repo's
-[NOTES](https://github.com/One-Learning-Community/grease/blob/main/NOTES.md).
+per-component resolution machinery, and the one big remaining slice — the
+`$__componentOriginal` save/restore boilerplate the `ComponentTagCompiler` emits around
+every `<x-…>` — lives behind a version-fragile emit rewrite that we haven't taken on yet.
+We've measured several other levers and rejected them — replacing `extract()` with a bind
+loop (a regression: `extract` is a C builtin, ~2× faster than userland), caching
+`is_file()` (a macOS profiling artifact that's ~3% on Linux, and the wrong thing on
+principle), a `gatherData` Renderable scan (~0.1% safe, with order and side-effect parity
+walls). Those dead ends are recorded openly in the repo's
+[NOTES](https://github.com/One-Learning-Community/grease/blob/main/NOTES.md), so we don't
+recircle them.
 
-So: two years on, what we'll stand behind is **reliably about a third off, byte-for-byte**
-— and the [harness](/guide/benchmarks) is right there if you want to chase the other half.
+So: two years on, what we'll stand behind is **reliably a fifth to two-fifths off,
+byte-for-byte**, depending on the page's shape — and the [harness](/guide/benchmarks) is
+right there if you want to chase the rest.
 
 ## Opt in
 
@@ -80,15 +159,16 @@ It is **not** auto-discovered — register the provider explicitly:
 Grease\View\GreaseViewServiceProvider::class,
 ```
 
-It `extend`s the bound `blade.compiler` singleton, swapping it for the greased compiler
-via `fromBase()` — so every directive, component, and condition already registered (or
-registered afterwards) is carried over. Register it early so the compiler is greased
-before any view compiles; existing views recompile on their next change, and a
-`php artisan view:clear` forces it immediately. Output stays byte-identical.
+It `extend`s the two bound singletons — `blade.compiler` and `view` — swapping each for
+its greased counterpart via `fromBase()`, so every directive, component, condition, and
+shared value already registered (or registered afterwards) is carried over. Register it
+early so the compiler is greased before any view compiles; existing views recompile on
+their next change, and a `php artisan view:clear` forces it immediately. Output stays
+byte-identical.
 
 ::: tip Profiling Blade honestly
-If you go chasing the other half, profile with a *sampling* profiler (the repo ships an
-Excimer harness, `benchmarks/blade_excimer.php`), not Xdebug — Xdebug disables JIT and
+If you go chasing the rest, profile with a *sampling* profiler (the repo ships an Excimer
+harness, `benchmarks/blade_excimer.php`), not Xdebug — Xdebug disables JIT and
 mis-attributes internal-op cost, which sent us down a dead end (it ranked `extract` at
 ~14% of a render when it's ~0.6%). See [Benchmarks](/guide/benchmarks) for the method.
 :::

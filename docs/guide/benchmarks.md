@@ -86,24 +86,30 @@ many observer/wildcard listeners you've registered. See
 
 ## Beyond Eloquent: Blade components
 
-A third axis again — the render path, not the model. On
-[Taylor's 1,000-anonymous-component challenge](/guide/blade), output asserted
-byte-identical before timing (`benchmarks/blade.php`):
+A third axis again — the render path, not the model. The provider swaps two singletons
+(`blade.compiler` and `view`) for greased, byte-identical drop-ins. The macro
+([`benchmarks/blade.php`](/guide/blade)) now runs **seven parity-gated variants**, each
+asserting the HTML is identical before it times anything:
 
-| Component shape | Δ |
+| Variant | Δ |
 | --- | :---: |
-| simple (initials + one attribute merge) | **−38%** |
-| rich (5 props, `@php`, conditionals, slots) | **−29.5%** |
+| simple (initials + one attribute merge) | **−38.9%** |
+| rich (5 props, `@php`, conditionals, slots) | **−29.9%** |
+| app page (class components, slots, `@include`/`@each`, composer) | **−21.4%** |
+| data table (nested `@foreach`, heavy `$loop` use) | **−27.8%** |
+| layout (`@extends`/`@section`/`@yield`/`@push`) | **−19.4%** |
 
 ```bash
 php benchmarks/blade.php
 ```
 
-That's the `@props` resolution and the `$attributes->merge()` pipeline — the two costs
-every component pays per render — not the halving Taylor asked for. The rest is the
-template executing and the per-component resolution machinery, where no clean,
-parity-safe win has surfaced yet. The honest scope, the dead ends we measured and
-rejected, and how to profile it are in [Blade Components](/guide/blade).
+That's six byte-identical wins compounded: `@props` resolution, the
+`$attributes->merge()` pipeline, a greased bag for class components, `getCompiledPath`
+memoization, `@foreach`'s `$loop` bookkeeping, and `@yield`'s content stitching — not the
+halving Taylor asked for. The split is by page shape: **component greasing wins on
+component-dense pages, loop greasing on cheap-bodied loops** (tables, lists) — and the two
+compose with zero regression. The honest scope, the dead ends we measured and rejected,
+and how to profile it are in [Blade Components](/guide/blade).
 
 ## How to read these honestly
 
