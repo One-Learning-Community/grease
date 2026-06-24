@@ -6,6 +6,8 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-23
+
 ### Added
 
 - **A greased validator — memoized rule parsing.** `ValidationRuleParser::parse` is a pure,
