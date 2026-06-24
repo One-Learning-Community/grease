@@ -144,6 +144,63 @@ class EventsDispatcherParityTest extends TestCase
         }, new OrderShipped('o9'));
     }
 
+    public function test_interface_listener_fires_when_class_event_dispatched_by_string(): void
+    {
+        // Dispatch a class event BY ITS STRING NAME with only an interface listener
+        // registered. Vanilla's getListeners() adds it via addInterfaceListeners()
+        // (class_exists($name) is true), so it fires. The no-listener fast path —
+        // which gates on hasListeners(), blind to interface listeners — must NOT
+        // short-circuit past it.
+        $this->assertParity(function ($d, $log) {
+            $d->listen(ShipmentEvent::class, function () use ($log) {
+                $log[] = 'interface';
+            });
+        }, OrderShipped::class);
+    }
+
+    public function test_interface_listener_fires_on_string_dispatch_with_halt(): void
+    {
+        // Same hole on the halt path: until()/halt must return the interface
+        // listener's value, not the fast path's null.
+        $this->assertParity(function ($d, $log) {
+            $d->listen(ShipmentEvent::class, function () use ($log) {
+                $log[] = 'interface';
+
+                return 'handled';
+            });
+        }, OrderShipped::class, [], true);
+    }
+
+    public function test_interface_listener_via_typed_closure_fires_on_string_dispatch(): void
+    {
+        // The optimization detects interface listeners from what parent::listen()
+        // actually registers — including a typed-closure auto-listen, where the event
+        // name is derived from the closure's parameter type, not the listen() args.
+        // If the flag missed this, the fast path would drop the listener.
+        $this->assertParity(function ($d, $log) {
+            $d->listen(function (ShipmentEvent $e) use ($log) {
+                $log[] = 'typed-closure';
+            });
+        }, OrderShipped::class, [new OrderShipped('o7')]);
+    }
+
+    public function test_interface_flag_engages_only_when_an_interface_listener_exists(): void
+    {
+        // White-box: the fast path stays cheap (flag off) for direct + concrete-class
+        // + wildcard listeners, and flips on the moment an interface listener lands —
+        // so apps without interface listeners pay nothing for the parity fix.
+        $g = new GreasedDispatcher(new Container);
+        $flag = fn () => (new \ReflectionProperty($g, 'greaseHasInterfaceListeners'))->getValue($g);
+
+        $g->listen('user.created', fn () => null);
+        $g->listen(OrderShipped::class, fn () => null); // a concrete class, not an interface
+        $g->listen('user.*', fn () => null);
+        $this->assertFalse($flag(), 'no interface listener → flag stays off');
+
+        $g->listen(ShipmentEvent::class, fn () => null);
+        $this->assertTrue($flag(), 'an interface listener flips the flag on');
+    }
+
     public function test_non_matching_wildcard_does_not_fire(): void
     {
         $this->assertParity(function ($d, $log) {
