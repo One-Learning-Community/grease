@@ -107,16 +107,6 @@ win to near zero — which is why the bench hydrates fresh. And the standalone n
 are isolated ops; the figure that matters is your pipeline's, measured end to end.
 :::
 
-### Measured in production
-
-`greaseSerializeDate`, dropped into a production serialization pipeline **on top of
-already-greased models** (≥5k-row models with timestamp columns): median
-**−9.7%**, mean −13.8%, max −31.8% CPU per row. The shape matched the model exactly —
-the absolute time saved tracks date-column count, so the thinnest date-heavy models
-gained most by percentage (up to −31.8%) and the heaviest least (−3.7%), even though the
-heavy ones saved the most absolute time per row. That's the honest shape: the date path is just as effective everywhere; its
-*percentage* is a function of how much other work the row does.
-
 ## Validate it yourself
 
 A stand-alone script (no phpbench) runs both helpers against the patterns they

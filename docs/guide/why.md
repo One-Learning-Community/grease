@@ -38,7 +38,7 @@ the marginal wins stop being marginal.
 
 ## Where these came from
 
-Grease isn't theoretical. Each tier began as a pull request to Laravel core, closed
+Grease isn't theoretical. Several tiers began as pull requests to Laravel core, closed
 unmerged — most of them on the reasoning above. The attempts span Laravel 9 through
 13, because the optimizations kept measuring as real:
 
@@ -71,7 +71,7 @@ that change, and why they don't matter in practice.
 
 Grease is for the app that has outgrown "Eloquent is fast enough" — the API serving
 wide JSON, the dashboard hydrating big collections, the queue worker chewing
-through rows. If your profiler points at hydration, casting, and serialization,
+through rows. If your profiler points at hydration, casting, serialization, container resolution, request input, config or route resolution, query compilation, or Blade rendering,
 this is the package every deploy at scale should be reaching for.
 
 If you're not there yet, you don't need it — and that's fine. Add it to the models

@@ -82,7 +82,7 @@ asserting the HTML is identical before it times anything:
 <BenchTable section="blade" />
 
 The **full page** is the realistic composite — every tier firing at once. It lands lower
-than any single-axis variant (**−9.3%**) because on a normal page genuine work dominates
+than any single-axis variant (**−11.5%**) because on a normal page genuine work dominates
 (~53% compiled template bodies, ~24% `e()` escaping — both off-limits); the single-axis
 rows show what each tier is worth where it *does* dominate.
 
@@ -143,7 +143,7 @@ percentages as "Grease's share of the Eloquent-bound work," not "your p99 will d
 larger denominator.
 :::
 
-- **Per-op vs per-request.** A −34% on `hydrate` is a per-operation figure; it
+- **Per-op vs per-request.** A −54% on `hydrate` is a per-operation figure; it
   becomes a per-request figure only multiplied by how many rows you hydrate. The
   end-to-end table is the one that includes your SQL.
 - **The win is workload-shaped.** Grease accelerates hydration, casting, and

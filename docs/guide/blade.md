@@ -17,20 +17,23 @@ overhaul. It's a *pile of marginal, byte-identical wins* — the same shape as t
 the package — each one a thing core would wave off in isolation, that compounds once
 they're all on the page.
 
-## Two singletons, two surfaces
+## Three singletons, three surfaces
 
-The provider swaps **two** bound singletons for greased, behaviour-identical drop-ins
-(both built via a `fromBase()` reflection-clone that carries the existing instance's full
+The provider swaps **three** bound singletons for greased, behaviour-identical drop-ins
+(each built via a `fromBase()` reflection-clone that carries the existing instance's full
 state, so the swap is transparent):
 
 - **`blade.compiler` → [`Grease\View\Compiler`](https://github.com/One-Learning-Community/grease/blob/main/src/View/Compiler.php)** — the *compile-time* emit and a
   couple of per-render lookups the compiler owns.
 - **`view` → [`Grease\View\Factory`](https://github.com/One-Learning-Community/grease/blob/main/src/View/Factory.php)** — the *runtime* render bookkeeping the
   view factory drives (`@foreach`'s `$loop`, `@yield`'s content stitching).
+- **`view.finder` → [`Grease\View\FileViewFinder`](https://github.com/One-Learning-Community/grease/blob/main/src/View/FileViewFinder.php)** — *view resolution*: when a fresh
+  `grease:view-cache` index exists, a view name resolves to its file via an array hit
+  instead of a filesystem stat-walk (the provider also registers that command).
 
 ## What it does
 
-Seven wins ride on those two singletons. Each replaces work every page repeats — work that
+The wins ride on those three singletons. Each replaces work every page repeats — work that
 doesn't depend on your data — with a tighter path that emits the identical bytes.
 
 **On the compiler (`blade.compiler`):**
@@ -168,7 +171,7 @@ walls). Those dead ends are recorded openly in the repo's
 [NOTES](https://github.com/One-Learning-Community/grease/blob/main/NOTES.md), so we don't
 recircle them.
 
-So: two years on, what we'll stand behind is **reliably a fifth to two-fifths off,
+So: two years on, what we'll stand behind is **reliably a tenth to two-fifths off,
 byte-for-byte**, depending on the page's shape — and the [harness](/guide/benchmarks) is
 right there if you want to chase the rest.
 
@@ -181,7 +184,7 @@ It is **not** auto-discovered — register the provider explicitly:
 Grease\View\GreaseViewServiceProvider::class,
 ```
 
-It `extend`s the two bound singletons — `blade.compiler` and `view` — swapping each for
+It `extend`s three bound singletons — `blade.compiler`, `view`, and (when a fresh `grease:view-cache` index exists) `view.finder` — swapping each for
 its greased counterpart via `fromBase()`, so every directive, component, condition, and
 shared value already registered (or registered afterwards) is carried over. Register it
 early so the compiler is greased before any view compiles; existing views recompile on

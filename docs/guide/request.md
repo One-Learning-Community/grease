@@ -27,7 +27,7 @@ Yes — every observable mutation path is tracked:
 - **Value mutators** flush the input maps: `merge`, `mergeIfMissing`, `replace`,
   `offsetSet`, `offsetUnset`, `setJson`.
 - **Lifecycle paths** flush as well: `__clone()` (and therefore `duplicate()` — which
-  Laravel uses internally, e.g. under route caching), `initialize()`, and `setMethod()`
+  Laravel uses internally for sub-requests), `initialize()`, and `setMethod()`
   (which rewrites `REQUEST_METHOD`, flipping the input source between the query and request
   bags). `__clone`/`initialize` also drop the `isJson` memo, since they can change the
   content-type.

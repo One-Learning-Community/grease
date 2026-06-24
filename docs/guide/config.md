@@ -1,7 +1,7 @@
 # The Config Repository
 
 Another axis on the request lifecycle — reading configuration. Like the request's
-`input()`, `config('a.b.c')` is work a request repeats **many times**: a vanilla Laravel 13
+`input()`, `config('a.b.c')` is work a request repeats **many times**: a vanilla Laravel 12/13
 request makes ~50 config reads before your code runs a line, and a real app — models, Blade
 components, packages, business logic — pushes that into the hundreds or thousands. Each one
 re-walks a nested array. There are two tiers here: a lazy per-read memo (a provider rebind),

@@ -24,7 +24,7 @@ query. Take the ones whose hot paths you actually run; the model trait is just t
 | [**Validation**](/guide/validation) | `GreaseValidationServiceProvider` | rule parsing per validation |
 | [**Container**](/guide/container) | `Grease\Container\Application` in `bootstrap/app.php` | constructor reflection per resolve |
 | [**Request**](/guide/request) | `Grease\Http\Request::capture()` in `public/index.php` | `input()` / `all()` per access |
-| [**Router**](/guide/routing) | `Grease\Routing\Router::swap($app)` (+ `grease:route-cache`) | middleware resolve + sort |
+| [**Router**](/guide/routing) | `Grease\Routing\Router::swap($app)` (+ `GreaseRoutingServiceProvider` + `grease:route-cache`) | middleware resolve + sort |
 
 Everything below walks each one. None are auto-discovered — opting in is always deliberate.
 
@@ -68,8 +68,8 @@ Octane-safe. Add the trait, deploy, move on.
 
 ## Pick your tiers (optional)
 
-`HasGrease` bundles four composable tiers. You can also use them à la carte — they
-share one per-class blueprint and compose freely:
+`HasGrease` bundles seven composable tiers. You can also use any subset à la carte —
+they share one per-class blueprint and compose freely; for example:
 
 ```php
 use Grease\Concerns\HasGreasedHydration;     // construct / hydration

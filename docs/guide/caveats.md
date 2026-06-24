@@ -116,18 +116,15 @@ model, event, and Blade tiers all work without them.
 
 ## Want zero cast caveats at all?
 
-Use the tiers à la carte and skip the cast tier. You keep the hydration and metadata
-wins — which carry **no** behavioural narrowing — and the cast path stays 100%
-vanilla:
+Use the tiers à la carte and skip the cast-metadata tiers. You keep the hydration win —
+which carries **no** behavioural narrowing — and the cast path stays 100% vanilla:
 
 ```php
 use Grease\Concerns\HasGreasedHydration;
-use Grease\Concerns\HasGreasedAttributes;
 
 class User extends Model
 {
     use HasGreasedHydration;   // construct / hydration
-    use HasGreasedAttributes;  // cast/date/mutator metadata memoization
 }
 ```
 

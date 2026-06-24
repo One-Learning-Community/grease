@@ -34,7 +34,7 @@ features:
     details: "Container resolution → request input → route-middleware resolve → config reads → query compilation → hydration & casting → Blade render → serialization. A faster path at each stage, all stacking on one real request."
   - icon: ⚡
     title: The model trait is the easiest win
-    details: "hydrate −34% · toArray −47% · set+dirty −39% · read −27% · enum cast −48% · date serialization −87%. `use HasGrease;` and done — no config, no provider. Marginal in isolation; compounded on a real request, they aren't."
+    details: "hydrate −54% · toArray −53% · set+dirty −62% · read −27% · enum cast −44% · date serialization −87%. `use HasGrease;` and done — no config, no provider. Marginal in isolation; compounded on a real request, they aren't."
   - icon: 🧊
     title: Eager caches make once-per-request work ~free
     details: "`grease:config-cache`, `grease:route-cache`, `grease:view-cache` — drop-in twins of Laravel's `*:cache` that precompute resolution into opcache-interned files. Config reads, middleware, and view lookups become hash hits, server-wide."
@@ -56,13 +56,13 @@ class User extends Model
 }
 ```
 
-**An endpoint that lists 100 users and serializes them to JSON drops from 3.12 ms to
-0.69 ms — real SQL included, not a micro-benchmark.** That's `:memory:` SQLite, where
-Eloquent is most of the request; against a networked database the same ~2.4 ms come off
+**An endpoint that lists 100 users and serializes them to JSON drops from 3.58 ms to
+0.46 ms — real SQL included, not a micro-benchmark.** That's `:memory:` SQLite, where
+Eloquent is most of the request; against a networked database the same ~3.1 ms come off
 a larger total, so the *percentage* is smaller while the *time removed* holds
 ([how to read these honestly](/guide/benchmarks#how-to-read-these-honestly)).
 
-That's **one tier.** The model trait is the easiest win and a fine place to stop — but
+That's the model and event tiers together. The model trait alone is the easiest win and a fine place to stop — but
 Grease is a menu, and the rest of it lives across the request, not just in Eloquent:
 
 - **Model** — `use HasGrease;` (or extend `Grease\GreasedModel`): hydration, casting, serialization, dirty-checking. Per-row × per-attribute. Zero config.

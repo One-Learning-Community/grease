@@ -42,8 +42,8 @@ that doesn't use it.
 | **`HasGreasedClassAttributes`** | Caches `resolveClassAttribute` (the `#[Table]` / `#[Fillable]` / `#[Hidden]` / `#[Appends]` / … lookups the per-instance `initialize*` booters run ~13× per `new` model) by a concat-free `[class][attribute]` key instead of vanilla's freshly-built `"$class@$attr"` string — **−13% on an eager-load `get()`**. |
 | **`HasGreasedInitializers`** | Freezes the four surviving `initialize*` trait booters (guards / hides / timestamps / touches) per class: cold path runs `parent::` once and snapshots the resulting properties; warm instances apply the snapshot by copy, skipping the `resolveClassAttribute` calls entirely. After the cache above made each call cheap, this kills the call *frequency* — `resolveClassAttribute` drops out of the eager profile's top frames. **−8.4% on the eager `get()`, on top of the tier above.** |
 | **`HasGreasedCasts`** | Replaces the per-access cast `switch` with a flyweight resolved once per cast type, plus a fast path that delegates enum conversion to the framework. |
-| **`HasGreasedCastProbes`** | Memoizes the per-key cast-classification probes (`isEnumCastable` / `isClassCastable` / `isClassSerializable`) that `addCastAttributesToArray` reruns on every row during `toArray()`. The verdict is a pure function of the cast type, like `getCastType` — yet recomputed per row (and `isClassSerializable` re-calls the other two). Vanilla calls them through `$this->`, so the memo lands even inside the delegated `parent::` loop. **−10% on a rich-cast `get()->toArray()`** (the `index_users`/`posts_with_author` shape). |
-| **`HasGreasedSerialization`** | Eliminates the Carbon parse-and-reformat round-trip for date serialization — when a per-class probe certifies the output is a byte-identical rewrite — on both the read path (`serializeDate`, output) and the write path (`fromDateTime`, the identity round-trip `getDirty()`/`originalIsEquivalent()` pays on every `save()`: **−38% on a `save()`-heavy dirty-check**). Also short-circuits the `toArray()` circular-recursion guard (a `debug_backtrace` + `Onceable` hash vanilla runs on *every* call) when no relations are loaded — there's nothing to recurse into, so `toArray()` is exactly `attributesToArray()`. **−27% on a relation-less `get()->toArray()`.** |
+| **`HasGreasedCastProbes`** | Memoizes the per-key cast-classification probes (`isEnumCastable` / `isClassCastable` / `isClassSerializable`) that `addCastAttributesToArray` reruns on every row during `toArray()`. The verdict is a pure function of the cast type, like `getCastType` — yet recomputed per row (and `isClassSerializable` re-calls the other two). Vanilla calls them through `$this->`, so the memo lands even inside the delegated `parent::` loop. **−10.2% on a rich-cast `get()->toArray()`** (the `index_users`/`posts_with_author` shape). |
+| **`HasGreasedSerialization`** | Eliminates the Carbon parse-and-reformat round-trip for date serialization — when a per-class probe certifies the output is a byte-identical rewrite — on both the read path (`addDateAttributesToArray` / `addCastAttributesToArray`, inside `toArray()`) and the write path (`fromDateTime`, the identity round-trip `getDirty()`/`originalIsEquivalent()` pays on every `save()`: **−38% on a `save()`-heavy dirty-check**). Also short-circuits the `toArray()` circular-recursion guard (a `debug_backtrace` + `Onceable` hash vanilla runs on *every* call) when no relations are loaded — there's nothing to recurse into, so `toArray()` is exactly `attributesToArray()`. **−27% on a relation-less `get()->toArray()`.** |
 
 `HasGrease` is the umbrella that pulls in all seven; `GreasedModel` is the same as an
 `extends`-able base class. (`HasGreasedClassAttributes` keeps its cache in a carve-out
@@ -82,6 +82,11 @@ string→type re-walk on the hottest path there is — every cast access — wit
 branch and no new caveat.
 
 ## Beyond Eloquent
+
+The model trait is one axis of several. Grease also greases [Blade rendering](/guide/blade)
+and [view resolution](/guide/view-cache), the [container](/guide/container), the
+[request](/guide/request), [config reads](/guide/config), the [router](/guide/routing), and
+[validation](/guide/validation) — each an independent opt-in.
 
 The [event dispatcher](/guide/events) is a *different axis* — not a per-model trait
 but a drop-in subclass of Laravel's dispatcher you bind as the `events` singleton.

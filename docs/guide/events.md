@@ -44,9 +44,9 @@ of A/B tests against the stock dispatcher.
 
 | Scenario | Δ |
 | --- | :---: |
-| dispatch with no listener | **−53%** |
-| dispatch with listeners | **−18%** |
-| event-dense request, warm | **−57%** |
+| dispatch with no listener | **−50%** |
+| dispatch with listeners | **−21%** |
+| event-dense request, warm | **−55%** |
 | event-dense request, cold (non-trivial wildcards) | **−54%** |
 
 On an event-dense request — a page render's worth of dispatches — it roughly
