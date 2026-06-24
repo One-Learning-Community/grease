@@ -3,6 +3,7 @@
 namespace Grease\Tests;
 
 use Grease\Concerns\HasGrease;
+use Grease\Tests\Fixtures\CastableColor;
 use Grease\Tests\Fixtures\Priority;
 use Grease\Tests\Fixtures\Status;
 use Grease\Tests\Fixtures\Suit;
@@ -19,6 +20,7 @@ class VanillaEnums extends Model
         'priority' => Priority::class,
         'suit' => Suit::class,
         'upper' => UpperCast::class,
+        'color' => CastableColor::class,
     ];
 }
 
@@ -33,6 +35,7 @@ class GreasedEnums extends Model
         'priority' => Priority::class,
         'suit' => Suit::class,
         'upper' => UpperCast::class,
+        'color' => CastableColor::class,
     ];
 }
 
@@ -54,6 +57,7 @@ class EnumCastParityTest extends TestCase
             'priority' => 2,
             'suit' => 'Hearts',
             'upper' => 'hello',
+            'color' => 'red',
         ], $overrides);
 
         return [
@@ -155,6 +159,19 @@ class EnumCastParityTest extends TestCase
 
         $g->status = Status::Inactive;
         $this->assertTrue($g->isDirty('status'), 'changing the case is dirty');
+    }
+
+    public function test_castable_implementing_enum_routes_to_its_cast_not_the_enum_path(): void
+    {
+        [$v, $g] = $this->enumPair();
+
+        // CastableColor is an enum that ALSO implements Castable. Vanilla routes it
+        // through castUsing()'s cast (output "COLOR:red"), NOT the enum path. The
+        // greased fast path must do the same — gating on enum_exists() alone returns
+        // the raw CastableColor::Red case, a divergence.
+        $this->assertSame('COLOR:red', $v->color, 'sanity: vanilla uses the castUsing() cast');
+        $this->assertSame($v->color, $g->color);
+        $this->assertSame($v->toArray(), $g->toArray());
     }
 
     public function test_fast_path_is_engaged_and_custom_class_still_defers(): void
