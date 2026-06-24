@@ -8,6 +8,16 @@ All notable changes to `grease` are documented here. The format is based on
 
 ### Added
 
+- **A greased validator — memoized rule parsing.** `ValidationRuleParser::parse` is a pure,
+  context-free function of the rule string, but vanilla recomputes it constantly: `getRule()` loops
+  every rule of an attribute and parses each, reached from many probes per validation — roughly
+  O(rules²) parses per attribute within one `passes()`. `Grease\Validation\Validator` overrides that
+  one looped parse site with a static memo (non-string rules bypass and parse live). Behaviour-identical
+  — same pass/fail, error bag, and message order. Measured **−45.6%** end-to-end on a real six-field
+  validation (Linux). Opt in with the (non-auto-discovered) `Grease\Validation\GreaseValidationServiceProvider`,
+  which points the validation Factory's resolver at the greased validator. Parity: `ValidatorParityTest`
+  + `GreaseValidationServiceProviderTest`.
+
 - **`grease:view-cache` — an eager, opcache-interned view-resolution index.** `view:cache` compiles
   every Blade template but discards the *resolution* it computed: at runtime `FileViewFinder::find()`
   re-stat-walks `paths × extensions` to map a view name to its file (and never memoizes a miss, so

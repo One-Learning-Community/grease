@@ -21,8 +21,7 @@ query. Take the ones whose hot paths you actually run; the model trait is just t
 | [**Blade**](/guide/blade) | `GreaseViewServiceProvider` | `@props` + attribute-merge per component |
 | [**View cache**](/guide/view-cache) | same provider + `grease:view-cache` | view name→path resolution |
 | [**Config**](/guide/config) | `GreaseConfigServiceProvider` (+ `grease:config-cache`) | `config()` reads |
-| **Validation** | `GreaseValidationServiceProvider` | rule parsing per validation |
-| **Query grammar** | `GreaseDatabaseServiceProvider` | identifier wrapping per query |
+| [**Validation**](/guide/validation) | `GreaseValidationServiceProvider` | rule parsing per validation |
 | [**Container**](/guide/container) | `Grease\Container\Application` in `bootstrap/app.php` | constructor reflection per resolve |
 | [**Request**](/guide/request) | `Grease\Http\Request::capture()` in `public/index.php` | `input()` / `all()` per access |
 | [**Router**](/guide/routing) | `Grease\Routing\Router::swap($app)` (+ `grease:route-cache`) | middleware resolve + sort |
@@ -128,21 +127,19 @@ hit instead of a per-render filesystem stat-walk. See [The View Cache](/guide/vi
 
 ## Faster config, validation, and queries (optional, app-wide)
 
-Three more provider-based tiers, each one line in `bootstrap/providers.php` and **not**
+Two more provider-based tiers, each one line in `bootstrap/providers.php` and **not**
 auto-discovered:
 
 ```php
 Grease\Config\GreaseConfigServiceProvider::class,         // memoized config() reads
 Grease\Validation\GreaseValidationServiceProvider::class, // memoized validation rule parsing
-Grease\Database\GreaseDatabaseServiceProvider::class,     // memoized query-grammar identifier wrapping
 ```
 
 - **Config** memoizes resolved `config()` values; pair it with `php artisan grease:config-cache`
   (a `config:cache` twin) for an opcache-interned flat index where every leaf read is a hash hit.
   See [The Config Repository](/guide/config).
 - **Validation** memoizes rule parsing across a validator's run — same pass/fail, same messages.
-- **Query grammar** memoizes identifier wrapping (`"posts"."id"`) for the MySQL, MariaDB, and
-  PostgreSQL grammars; other drivers fall back to vanilla. Byte-identical SQL.
+  See [Validation](/guide/validation).
 
 ## The foundation tiers (optional, app-entry)
 

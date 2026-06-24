@@ -9,8 +9,7 @@
 
 Grease is a menu of independent, **byte-identical** optimizations spanning the whole request
 lifecycle — Eloquent hydration/casting/serialization, the event dispatcher, the Blade
-compiler, `config()` reads, validation, the query grammar, the container, the request, and
-the router. They share one idea: Laravel re-derives the same stable facts on every row,
+compiler, `config()` reads, validation, the container, the request, and the router. They share one idea: Laravel re-derives the same stable facts on every row,
 attribute, component, render, request, and query; Grease computes each once and reuses it.
 Take the tiers whose hot paths you actually run — the model trait is the zero-config on-ramp,
 not the whole package. Zero framework changes; anything that doesn't opt in runs pure vanilla.
@@ -46,7 +45,6 @@ Grease\Events\GreaseEventServiceProvider::class,         // faster event dispatc
 Grease\View\GreaseViewServiceProvider::class,            // faster Blade render (+ grease:view-cache)
 Grease\Config\GreaseConfigServiceProvider::class,        // memoized config() reads (+ grease:config-cache)
 Grease\Validation\GreaseValidationServiceProvider::class, // memoized validation rule parsing
-Grease\Database\GreaseDatabaseServiceProvider::class,    // memoized query-grammar identifier wrapping
 ```
 
 A few more **foundation** tiers go deeper into the request lifecycle. They can't be a
@@ -113,7 +111,7 @@ composer bench    # phpbench per-op A/B + the SQL suite
 - **[How It Works](https://one-learning-community.github.io/grease/guide/how-it-works)** — the per-class blueprint and each tier
 - **[Benchmarks](https://one-learning-community.github.io/grease/guide/benchmarks)** — full numbers, methodology, and reproducing them on your build
 - **[The Method](https://one-learning-community.github.io/grease/guide/method)** — how a win is found and proven (and how the dead ends got rejected)
-- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** · **[The Router](https://one-learning-community.github.io/grease/guide/routing)** · **[The View Cache](https://one-learning-community.github.io/grease/guide/view-cache)** — the beyond-Eloquent tiers
+- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** · **[Validation](https://one-learning-community.github.io/grease/guide/validation)** · **[The Router](https://one-learning-community.github.io/grease/guide/routing)** · **[The View Cache](https://one-learning-community.github.io/grease/guide/view-cache)** — the beyond-Eloquent tiers
 - **[Caveats & Narrowing](https://one-learning-community.github.io/grease/guide/caveats)** — the two small, obscure things that change
 
 ## Requirements
