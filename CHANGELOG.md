@@ -6,6 +6,65 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-24
+
+A byte-identical hardening release. A full parity audit of the whole package surfaced four
+silent output divergences from vanilla, plus a few normal-usage cache-staleness edges. No API
+changes; every fix ships with a regression test that fails on the old behaviour, and the
+dispatch path actually came out *faster*.
+
+### Fixed
+
+- **Event dispatcher: interface listeners are no longer dropped on a string-dispatched class
+  event.** The no-listener fast path gated on `hasListeners()`, which doesn't see interface
+  listeners — so `dispatch(SomeEvent::class)` whose only listener was bound to an interface it
+  implements silently fired nothing (vanilla fires it via `addInterfaceListeners()`). The fast
+  path now also rules out interface listeners, gated on a boot-time flag set only when an
+  interface-named listener is registered — so apps without them pay nothing, and no-listener
+  dispatch is *faster* than before (the flag replaces a per-dispatch reachability check).
+
+- **Casts: an enum that also implements `Castable` now routes to its `castUsing()` cast.** The
+  enum fast path gated on `enum_exists()` alone; vanilla's `isEnumCastable()` excludes `Castable`
+  subclasses, so such an enum returned its raw case instead of the cast's output. Now mirrored —
+  the extra check is memoized per cast type, so zero hot-path cost.
+
+- **Serialization: out-of-range / zero dates defer to vanilla instead of being rewritten
+  verbatim.** The date fast path's shape check was purely syntactic, so a legacy MySQL
+  `0000-00-00 00:00:00` (or `2026-02-30`) was emitted as-is while vanilla overflow-normalizes it
+  through Carbon (`-0001-11-30`). The guard now also confirms the date is real (`checkdate` + time
+  ranges) before fast-pathing; valid dates still skip the Carbon round-trip. Same fix on the
+  `fromDateTime()` write path, which feeds the `save()` dirty check.
+
+- **Serialization: `toArray()` no longer drops a relation an appended accessor lazily loads.** The
+  relation-less short-circuit checked `relations === []` before running accessors — but an
+  `$appends` accessor reading `$this->someRelation` loads it as a side effect, which vanilla emits
+  (relations serialize after attributes). The short-circuit now applies only if relations are still
+  empty after the attributes are built.
+
+- **Attributes: `getDates()` is no longer poisoned by a timestamps-disabled instance.** The
+  per-class cache ignored `$model->timestamps = false` / `withoutTimestamps()`, so a timestamps-off
+  instance could blank the cache for timestamps-on instances of the same class (dropping
+  `created_at`/`updated_at` from their output). Now keyed by `usesTimestamps()`.
+
+- **Attributes: runtime `setKeyName()` / `setKeyType()` / `setIncrementing()` invalidate the cast
+  cache.** These feed `getCasts()`'s key entry; the per-class cache now steps aside for an instance
+  that mutates them at runtime, exactly like `mergeCasts()` / `withCasts()`.
+
+- **Request: `isJson()` is read live, not memoized.** A content-type header changed after
+  construction (content-negotiation middleware) left the memo stale; it now delegates to vanilla
+  every call — the input-base memo already keeps it off the hot path.
+
+### Changed
+
+- **Documented two runtime-surgery narrowings** — reassigning a model's table (`setTable()` on a
+  query prototype) or date format (`setDateFormat()` per instance) *after it's in use* — on the
+  [Caveats](https://one-learning-community.github.io/grease/guide/caveats) page, alongside a new
+  guiding principle: Grease optimizes the 95–99% case; if you do something unusual with your models
+  or the request, run your own tests with Grease enabled.
+- **Added a compiler drift guard** pinning the class-component opening emit byte-for-byte to the
+  framework's static plus Grease's one seed line, so a future Laravel change to that emit (including
+  a 12-vs-13 difference) fails CI instead of shipping a divergence.
+
 ## [0.5.0] - 2026-06-23
 
 ### Added
@@ -333,7 +392,9 @@ dirty-check.
 - PHP 8.2+
 - Laravel 12 / 13
 
-[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/One-Learning-Community/grease/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/One-Learning-Community/grease/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/One-Learning-Community/grease/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/One-Learning-Community/grease/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/One-Learning-Community/grease/compare/v0.2.0...v0.3.0
