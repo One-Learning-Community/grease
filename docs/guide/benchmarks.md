@@ -93,7 +93,7 @@ php benchmarks/blade.php
 That's seven byte-identical wins compounded: `@props` resolution, the
 `$attributes->merge()` pipeline, a greased bag for class components, `getCompiledPath`
 memoization, `@foreach`'s `$loop` bookkeeping, `@yield`'s content stitching, and the
-`@push`/`@prepend` stack assembly — not the halving Taylor asked for. The split is by page shape: **component greasing wins on
+`@push`/`@prepend` stack assembly — not a halving, but a real, byte-identical cut. The split is by page shape: **component greasing wins on
 component-dense pages, loop greasing on cheap-bodied loops** (tables, lists) — and the two
 compose with zero regression. The honest scope, the dead ends we measured and rejected,
 and how to profile it are in [Blade Components](/guide/blade).
@@ -189,7 +189,7 @@ docker run --rm -v "$PWD":/app -w /app grease-bench php benchmarks/realworld.php
 composer test                       # parity tests — the byte-identical contract
 composer bench                      # phpbench: CastBench (per-op A/B) + SuiteBench (SQL)
 php benchmarks/realworld.php         # the end-to-end macro above
-php benchmarks/blade.php             # Taylor's 1,000-component challenge
+php benchmarks/blade.php             # the 1,000-component render benchmark
 php benchmarks/serialize_helpers.php # greaseSerializeDate / greaseSerializeOnly, A/B
 php benchmarks/blade_excimer.php     # honest sampling profile of the render path
 ```

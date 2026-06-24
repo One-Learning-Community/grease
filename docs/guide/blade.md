@@ -4,16 +4,13 @@ A *third axis*, like the [dispatcher](/guide/events): not a per-model trait but 
 **Blade render path**. The traits make models faster; this makes the views every page
 renders faster — byte-for-byte the same HTML.
 
-## The challenge
+## The benchmark
 
-It starts with a [tweet Taylor posted in April 2024](https://x.com/taylorotwell/status/1781039378376146970):
+The stress test is rendering **1,000 anonymous components** — the standard way to isolate
+Blade's per-component overhead, which runs about 14 ms for that many on a typical laptop.
+The question Grease asks of it: can that number come down *reliably*?
 
-> Sometimes I get obsessed with figuring out if Blade component rendering performance
-> can be supercharged. Rendering 1,000 anonymous components takes about 14ms on my MBP.
-> Can we cut this in half? 🤔 Dig in and help me figure it out?
-
-We've been chewing on *reliably* trimming that number ever since — on and off for two
-years. "Reliably" is the whole game: it's easy to shave a render by changing what it
+"Reliably" is the whole game: it's easy to shave a render by changing what it
 emits; the bar here is the same as everywhere else in Grease — **byte-identical output**,
 asserted before any number is timed. And the honest framing up front: this isn't a Blade
 overhaul. It's a *pile of marginal, byte-identical wins* — the same shape as the rest of
@@ -127,8 +124,8 @@ asserted identical):
 | asset stacks | `@push`/`@prepend` per row into a `@stack` | <Delta k="page-stacks" :digits="1" /> |
 | full page | extends a layout, 5 sections, a 100-row `@foreach` table, components | <Delta k="page-full" :digits="1" /> |
 
-The `@foreach` variants (`page-foreach`, `page-rich-foreach`) render Taylor's avatar
-challenge in the *realistic* loop form, and land on the same ~<Delta k="page-foreach" /> /
+The `@foreach` variants (`page-foreach`, `page-rich-foreach`) render the avatar
+benchmark in the *realistic* loop form, and land on the same ~<Delta k="page-foreach" /> /
 ~<Delta k="page-rich-foreach" /> as their `@for` counterparts — confirming the tiers compose
 with zero regression.
 
@@ -155,7 +152,7 @@ leans on the compiler tier and a table-dense page leans on the factory tier, and
 with both gets both.
 :::
 
-Not the halving Taylor asked for, and worth saying plainly. The rest of a render is the
+Not a halving, and worth saying plainly. The rest of a render is the
 compiled template *executing* (real work — your markup, the `Str` calls) plus the
 per-component resolution machinery. The one big remaining slice — the
 `$__componentOriginal` save/restore boilerplate the `ComponentTagCompiler` emits around
