@@ -74,6 +74,19 @@ class Compiler extends BladeCompiler
         return $this->greaseCompiledPaths[$path] ??= parent::getCompiledPath($path);
     }
 
+    /**
+     * Pre-seed the compiled-path memo from an eager `grease:view-cache` index (source path =>
+     * compiled path), so the first render of each view in a fresh process skips the `xxh128` hash.
+     * Live-computed entries win (`+`), and each value is the exact deterministic hash vanilla would
+     * produce, so output stays byte-identical.
+     *
+     * @param  array<string, string>  $paths
+     */
+    public function useGreaseCompiledPaths(array $paths): void
+    {
+        $this->greaseCompiledPaths += $paths;
+    }
+
     protected function compileProps($expression)
     {
         $site = md5(($this->getPath() ?: 'inline').':'.$this->greasePropsSite++);

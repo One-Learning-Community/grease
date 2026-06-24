@@ -50,12 +50,18 @@ $schema->create('posts', function (Blueprint $t) {
 class FVUser extends Model
 {
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer'];
-    public function posts() { return $this->hasMany(FVPost::class, 'user_id'); }
+
+    public function posts()
+    {
+        return $this->hasMany(FVPost::class, 'user_id');
+    }
 }
 class FVPost extends Model
 {
     protected $table = 'posts';
+
     protected $casts = ['view_count' => 'integer'];
 }
 
@@ -63,31 +69,55 @@ class FVPost extends Model
 class FAUser extends Model
 {
     use HasGrease;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer'];
-    public function posts() { return $this->hasMany(FAPost::class, 'user_id'); }
-    public function fill(array $attributes) { return parent::fill($attributes); }
+
+    public function posts()
+    {
+        return $this->hasMany(FAPost::class, 'user_id');
+    }
+
+    public function fill(array $attributes)
+    {
+        return parent::fill($attributes);
+    }
 }
 class FAPost extends Model
 {
     use HasGrease;
+
     protected $table = 'posts';
+
     protected $casts = ['view_count' => 'integer'];
-    public function fill(array $attributes) { return parent::fill($attributes); }
+
+    public function fill(array $attributes)
+    {
+        return parent::fill($attributes);
+    }
 }
 
 // --- B: full HasGrease (trait short-circuit live) ---
 class FBUser extends Model
 {
     use HasGrease;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer'];
-    public function posts() { return $this->hasMany(FBPost::class, 'user_id'); }
+
+    public function posts()
+    {
+        return $this->hasMany(FBPost::class, 'user_id');
+    }
 }
 class FBPost extends Model
 {
     use HasGrease;
+
     protected $table = 'posts';
+
     protected $casts = ['view_count' => 'integer'];
 }
 
@@ -128,6 +158,7 @@ $bench = function (callable $query) use ($iters) {
     for ($i = 0; $i < $iters; $i++) {
         $sink += count($query());
     }
+
     return [(hrtime(true) - $t0) / 1e9, $sink];
 };
 

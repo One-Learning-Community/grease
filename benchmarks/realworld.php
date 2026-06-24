@@ -20,6 +20,7 @@ use Grease\Concerns\HasGrease;
 use Grease\Events\Dispatcher as GreaseDispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Carbon;
 
 // `--json[=path]` switches the output from the human table to a machine-readable payload
 // (written to <path>, or stdout) — the live input to the docs. Same measurement either way,
@@ -189,7 +190,7 @@ $useDispatcher = fn (string $arm) => Model::setEventDispatcher($dispatchers[$arm
 // weakening it: a genuine date-serialization divergence still shows, since both arms
 // serialize the same frozen instant. Reset before the timed rounds so they measure
 // against the real clock.
-\Illuminate\Support\Carbon::setTestNow('2026-01-01 12:00:00');
+Carbon::setTestNow('2026-01-01 12:00:00');
 
 foreach ($WORKLOADS as $name => $w) {
     $useDispatcher('plain');
@@ -203,7 +204,7 @@ foreach ($WORKLOADS as $name => $w) {
     }
 }
 
-\Illuminate\Support\Carbon::setTestNow();
+Carbon::setTestNow();
 $say("PARITY: PASS — grease output byte-identical to vanilla.\n".str_repeat('-', 70)."\n");
 
 // Linear-interpolated percentile (same method as numpy's default). p in [0,100].

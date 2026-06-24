@@ -3,6 +3,7 @@
 namespace Grease\Tests;
 
 use Grease\Tests\Fixtures\GreasedSample;
+use Grease\Tests\Fixtures\SampleData;
 use Grease\Tests\Fixtures\VanillaSample;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -28,7 +29,7 @@ abstract class TestCase extends Orchestra
      */
     protected function sampleRow(array $overrides = []): array
     {
-        return array_merge(\Grease\Tests\Fixtures\SampleData::row(), $overrides);
+        return array_merge(SampleData::row(), $overrides);
     }
 
     /** Every cast column (excludes id; includes the timestamp date columns). */

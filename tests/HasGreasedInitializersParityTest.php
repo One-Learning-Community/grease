@@ -189,7 +189,9 @@ class VanillaInitParent extends Model {}
 class VanillaInitChild extends VanillaInitParent
 {
     protected $fillable = ['c'];
+
     protected $hidden = ['z'];
+
     public $timestamps = true;
 }
 
@@ -203,7 +205,9 @@ class GreasedInitParent extends Model
 class GreasedInitChild extends GreasedInitParent
 {
     protected $fillable = ['c'];
+
     protected $hidden = ['z'];
+
     public $timestamps = true;
 }
 
@@ -225,6 +229,6 @@ trait AddsUserInitState
 #[Touches(['owner'])]
 class GreasedInitWithUserTrait extends Model
 {
-    use HasGreasedInitializers;
     use AddsUserInitState;
+    use HasGreasedInitializers;
 }

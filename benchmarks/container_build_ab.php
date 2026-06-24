@@ -24,7 +24,9 @@ use Grease\Tests\Fixtures\Container\LoggerContract;
 use Grease\Tests\Fixtures\Container\NeedsPrimitive;
 use Grease\Tests\Fixtures\Container\NoCtor;
 use Grease\Tests\Fixtures\Container\NullableDep;
+use Illuminate\Container\Container;
 use Illuminate\Container\Container as VanillaContainer;
+use Illuminate\Contracts\Container\BindingResolutionException;
 
 // Fixtures are shared with tests/Container/BlueprintParityTest.php (Grease convention:
 // the bench times exactly what a parity test proves identical).
@@ -35,7 +37,7 @@ use Illuminate\Container\Container as VanillaContainer;
  * Each case: a label + a closure that takes a fresh container and returns a
  * canonical, comparable representation of the resolved result.
  *
- * @return array<string, callable(\Illuminate\Container\Container): mixed>
+ * @return array<string, callable(Container): mixed>
  */
 function cases(): array
 {
@@ -101,7 +103,7 @@ function cases(): array
                 $c->make(NeedsPrimitive::class);
 
                 return 'NO-THROW';
-            } catch (\Illuminate\Contracts\Container\BindingResolutionException $e) {
+            } catch (BindingResolutionException $e) {
                 return 'threw';
             }
         },
@@ -111,7 +113,7 @@ function cases(): array
                 $c->make('App\\Nope\\DoesNotExist');
 
                 return 'NO-THROW';
-            } catch (\Illuminate\Contracts\Container\BindingResolutionException $e) {
+            } catch (BindingResolutionException $e) {
                 return 'threw';
             }
         },
@@ -121,7 +123,7 @@ function cases(): array
                 $c->make(LoggerContract::class); // unbound interface
 
                 return 'NO-THROW';
-            } catch (\Illuminate\Contracts\Container\BindingResolutionException $e) {
+            } catch (BindingResolutionException $e) {
                 return 'threw';
             }
         },
@@ -133,8 +135,8 @@ function cases(): array
 $failures = [];
 
 foreach (cases() as $label => $case) {
-    $van = $case(new VanillaContainer());
-    $gre = $case(new GreasedContainer());
+    $van = $case(new VanillaContainer);
+    $gre = $case(new GreasedContainer);
 
     $vanS = var_export($van, true);
     $greS = var_export($gre, true);
@@ -149,7 +151,7 @@ if ($failures !== []) {
     exit(1);
 }
 
-echo "Parity: OK (".count(cases())." cases)\n";
+echo 'Parity: OK ('.count(cases())." cases)\n";
 
 // ---- Benchmark ------------------------------------------------------------------
 
@@ -158,7 +160,7 @@ $iterations = (int) ($argv[1] ?? 200_000);
 function buildContainer(string $class): VanillaContainer
 {
     /** @var VanillaContainer $c */
-    $c = new $class();
+    $c = new $class;
     $c->bind(LoggerContract::class, FileLogger::class);
 
     return $c;

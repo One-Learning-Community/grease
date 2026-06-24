@@ -12,9 +12,7 @@ use Illuminate\Http\Request;
  */
 class SpikeController
 {
-    public function __construct(private SpikeService $service)
-    {
-    }
+    public function __construct(private SpikeService $service) {}
 
     public function show(Request $request, SpikeService $injected): array
     {

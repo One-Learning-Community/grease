@@ -8,6 +8,60 @@ All notable changes to `grease` are documented here. The format is based on
 
 ### Added
 
+- **A greased validator — memoized rule parsing.** `ValidationRuleParser::parse` is a pure,
+  context-free function of the rule string, but vanilla recomputes it constantly: `getRule()` loops
+  every rule of an attribute and parses each, reached from many probes per validation — roughly
+  O(rules²) parses per attribute within one `passes()`. `Grease\Validation\Validator` overrides that
+  one looped parse site with a static memo (non-string rules bypass and parse live). Behaviour-identical
+  — same pass/fail, error bag, and message order. Measured **−45.6%** end-to-end on a real six-field
+  validation (Linux). Opt in with the (non-auto-discovered) `Grease\Validation\GreaseValidationServiceProvider`,
+  which points the validation Factory's resolver at the greased validator. Parity: `ValidatorParityTest`
+  + `GreaseValidationServiceProviderTest`.
+
+- **`grease:view-cache` — an eager, opcache-interned view-resolution index.** `view:cache` compiles
+  every Blade template but discards the *resolution* it computed: at runtime `FileViewFinder::find()`
+  re-stat-walks `paths × extensions` to map a view name to its file (and never memoizes a miss, so
+  dynamic / `@include($var)` / `<x-dynamic-component>` names re-stat on every render forever), and the
+  engine re-hashes the path per render. `grease:view-cache` (a `view:cache` twin) records `name =>
+  source path` and `source path => compiled path` into a constant `return [...]` file opcache interns
+  into shared memory; `Grease\View\GreaseViewServiceProvider` seeds a greased `FileViewFinder`
+  (`find()` = array hit ?? live `parent::find()`, in its own property so it survives `flush()`/Octane)
+  and the compiled-path memo from it when fresh. Byte-identical by construction (each entry is what the
+  live finder/compiler returned at build time, so view precedence is captured automatically); a name
+  not in the index resolves live. The honest metric is the stat count — 20 views resolve with 0
+  `file_exists()` calls vs 20 (Linux: 13.2µs → 1.0µs/request) — and the never-memoized miss is a
+  permanent win even under Octane. Freshness-guarded against the compiled-view + config caches (a later
+  `view:cache`/`config:cache`/`optimize` disables a stale index); inert in development. Opt in via the
+  existing `Grease\View\GreaseViewServiceProvider` + `php artisan grease:view-cache` at deploy. Parity:
+  `GreasedViewFinderTest` + `GreaseViewCacheTest`.
+
+- **A greased router — cached middleware resolve+sort.** For the matched route,
+  `Router::resolveMiddleware()` expands groups/aliases and sorts via `SortedMiddleware`
+  (`class_implements()` + `class_parents()` per middleware) twice per request — uncached, on top
+  of the raw name list the route already memoizes. `Grease\Routing\Router` caches the exact
+  resolved+sorted array keyed by the literal `(gathered, excluded)` signature; order is preserved
+  verbatim. Flushes on every map mutator (`aliasMiddleware`/`middlewareGroup`/`prepend`/`push`/
+  `removeMiddlewareFromGroup`/`flushMiddlewareGroups`). Once-per-request work, so small in
+  isolation, but pure waste removed every request — the lazy cache halves it, the full win lands
+  under Octane (persistent router). Opt in with `Grease\Routing\Router::swap($app)` in
+  `bootstrap/app.php` (the kernel takes the router by constructor injection, so a provider rebind
+  is too late). No real caveat. Independent of `route:cache` (which caches URL matching + raw names,
+  never the resolved list). Parity: `RouterMiddlewareParityTest` + `Boot{Vanilla,Greased}Test`.
+
+- **`grease:route-cache` — an eager, opcache-interned middleware index.** A drop-in twin of
+  `route:cache` that also precomputes every route's resolved+sorted middleware into a
+  `signature => [classes]` constant `return [...]` file, opcache-interned into shared memory — so
+  the greased router's cache starts **pre-seeded** and both the dispatch and terminate passes are
+  hits from request one. This is the tier that wins **FPM** (where the lazy cache, on a per-request
+  router, can't survive between requests), bringing FPM middleware resolution to ~Octane
+  steady-state: measured **~−96% vs the lazy tier** (FPM-cold model). Keyed by the same signature
+  as the lazy path, so it only ever serves an exact-match hit (dynamic-middleware routes miss →
+  resolve live), live entries are never overwritten, and a map mutation flushes seeded entries.
+  Added contract: build==runtime maps (rebuild on deploy; don't gate middleware registration on the
+  environment) — the freshness guard disables a stale index after any `route:cache`/`route:clear`/
+  `config:cache`/`optimize`, and it's inert in development. Opt in with the (non-auto-discovered)
+  `Grease\Routing\GreaseRoutingServiceProvider`. Parity: `GreaseRoutingServiceProviderTest`.
+
 - **A greased config repository — memoized `config()` reads.** `config('a.b.c')` is a
   per-request multiplier (a vanilla Laravel 13 request makes ~50 reads before your code runs;
   a real app makes hundreds-to-thousands), and vanilla re-walks the nested array on every call.

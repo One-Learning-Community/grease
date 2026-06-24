@@ -26,11 +26,11 @@ namespace Grease\Concerns;
  */
 trait HasGrease
 {
-    use HasGreasedHydration;
     use HasGreasedAttributes;
-    use HasGreasedClassAttributes;
-    use HasGreasedInitializers;
-    use HasGreasedCasts;
     use HasGreasedCastProbes;
+    use HasGreasedCasts;
+    use HasGreasedClassAttributes;
+    use HasGreasedHydration;
+    use HasGreasedInitializers;
     use HasGreasedSerialization;
 }

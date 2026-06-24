@@ -57,7 +57,7 @@ $warmup = 5;
 $register = require __DIR__.'/blade/register.php';
 
 /** Boot an isolated app for one arm, with its own compiled-view cache. */
-$boot = function (bool $greased) use ($VIEWS, $register): \Illuminate\Foundation\Application {
+$boot = function (bool $greased) use ($VIEWS, $register): Illuminate\Foundation\Application {
     // Clear the framework's process-global component statics so two apps don't bleed.
     Component::flushCache();
     Component::forgetComponentsResolver();
@@ -85,7 +85,7 @@ $boot = function (bool $greased) use ($VIEWS, $register): \Illuminate\Foundation
 };
 
 /** Make $app the active app for the framework's static component machinery. */
-$activate = function (\Illuminate\Foundation\Application $app): void {
+$activate = function (Illuminate\Foundation\Application $app): void {
     Container::setInstance($app);
     Facade::setFacadeApplication($app);
     Facade::clearResolvedInstances();

@@ -62,7 +62,7 @@ class GreasedSetter extends VanillaSetter
  */
 class RuntimeBehaviorTest extends TestCase
 {
-    public function test_runtime_mergeCasts_is_not_stale(): void
+    public function test_runtime_merge_casts_is_not_stale(): void
     {
         $row = $this->sampleRow(['extra' => '7']);
 
@@ -78,7 +78,7 @@ class RuntimeBehaviorTest extends TestCase
         $this->assertEquals($v->getCasts(), $g->getCasts());
     }
 
-    public function test_withCasts_is_not_stale(): void
+    public function test_with_casts_is_not_stale(): void
     {
         $g = (new GreasedSample)->newFromBuilder($this->sampleRow(['extra' => '1']));
         $g->getCasts();

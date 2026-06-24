@@ -10,7 +10,7 @@ use Illuminate\Foundation\Application as BaseApplication;
  * The container builds itself before any service provider runs, so — unlike the
  * Eloquent traits or the events/Blade singletons — the blueprint tier can't be bound
  * from inside the app. Opt in by instantiating this in place of
- * {@see \Illuminate\Foundation\Application} in `bootstrap/app.php`:
+ * {@see BaseApplication} in `bootstrap/app.php`:
  *
  *     $app = (new \Grease\Container\Application(...))->...;
  *

@@ -2,8 +2,10 @@
 
 namespace Grease\Tests;
 
+use Grease\Concerns\HasGreasedSerialization;
+
 /**
- * {@see \Grease\Concerns\HasGreasedSerialization::toArray()} short-circuits the
+ * {@see HasGreasedSerialization::toArray()} short-circuits the
  * circular-recursion guard when no relations are loaded: vanilla wraps every `toArray()` in
  * `withoutRecursion()` (a `debug_backtrace` + `Onceable` hash per call), but with
  * `$this->relations === []` there is nothing to recurse into, so `toArray()` is exactly

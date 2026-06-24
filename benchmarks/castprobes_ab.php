@@ -27,6 +27,7 @@ use Grease\Concerns\HasGreasedInitializers;
 use Grease\Concerns\HasGreasedSerialization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Carbon;
 
 $rows = (int) ($argv[1] ?? 100);
 $iters = (int) ($argv[2] ?? 6000);
@@ -34,24 +35,24 @@ $iters = (int) ($argv[2] ?? 6000);
 // A: six tiers, no cast-probe memoization.
 trait HasGreasePrior6
 {
-    use HasGreasedHydration;
     use HasGreasedAttributes;
-    use HasGreasedClassAttributes;
-    use HasGreasedInitializers;
     use HasGreasedCasts;
+    use HasGreasedClassAttributes;
+    use HasGreasedHydration;
+    use HasGreasedInitializers;
     use HasGreasedSerialization;
 }
 
 // B: all seven (prior six + cast-probe memoization).
 trait HasGreaseFull7
 {
-    use HasGreasedHydration;
     use HasGreasedAttributes;
-    use HasGreasedClassAttributes;
-    use HasGreasedInitializers;
-    use HasGreasedCasts;
-    use HasGreasedSerialization;
     use HasGreasedCastProbes;
+    use HasGreasedCasts;
+    use HasGreasedClassAttributes;
+    use HasGreasedHydration;
+    use HasGreasedInitializers;
+    use HasGreasedSerialization;
 }
 
 $capsule = BootsEloquent::capsule();
@@ -70,18 +71,23 @@ $capsule->schema()->create('users', function (Blueprint $t) {
 class CPVanilla extends Model
 {
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
 }
 class CPA extends Model
 {
     use HasGreasePrior6;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
 }
 class CPB extends Model
 {
     use HasGreaseFull7;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
 }
 
@@ -94,7 +100,7 @@ foreach (array_chunk($seed, 500) as $c) {
     $capsule->table('users')->insert($c);
 }
 
-\Illuminate\Support\Carbon::setTestNow('2026-01-01 12:00:00');
+Carbon::setTestNow('2026-01-01 12:00:00');
 
 $oracle = CPVanilla::query()->limit($rows)->get()->toArray();
 $a = CPA::query()->limit($rows)->get()->toArray();
@@ -114,6 +120,7 @@ $bench = function (string $class) use ($rows, $iters) {
     for ($i = 0; $i < $iters; $i++) {
         $sink += count($class::query()->limit($rows)->get()->toArray());
     }
+
     return (hrtime(true) - $t0) / 1e9;
 };
 
@@ -129,4 +136,4 @@ for ($r = 0; $r < $repeats; $r++) {
 }
 printf("\nfull-7 vs prior-6 (cast-probe memo on vs off):   %+.1f%%   (mean of %d repeats)\n", ($tb - $ta) / $ta * 100, $repeats);
 
-\Illuminate\Support\Carbon::setTestNow();
+Carbon::setTestNow();

@@ -11,7 +11,6 @@
  * Call counts are the tell: e.g. ~9 Collection allocations per single component render
  * is what flagged ComponentAttributeBag::merge as the lever after @props.
  */
-
 $file = $argv[1] ?? null;
 if (! $file || ! is_file($file)) {
     fwrite(STDERR, "usage: php benchmarks/cachegrind_top.php <cachegrind.out.NNNN> [topN]\n");

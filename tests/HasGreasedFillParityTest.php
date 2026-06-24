@@ -84,6 +84,7 @@ class HasGreasedFillParityTest extends TestCase
 class VanillaFillFixture extends Model
 {
     protected $table = 'fill_widgets';
+
     protected $fillable = ['name', 'qty'];
 }
 
@@ -92,12 +93,14 @@ class GreasedFillFixture extends Model
     use HasGreasedHydration;
 
     protected $table = 'fill_widgets';
+
     protected $fillable = ['name', 'qty'];
 }
 
 class VanillaGuardedFixture extends Model
 {
     protected $table = 'fill_widgets';
+
     protected $guarded = ['*'];
 }
 
@@ -106,5 +109,6 @@ class GreasedGuardedFixture extends Model
     use HasGreasedHydration;
 
     protected $table = 'fill_widgets';
+
     protected $guarded = ['*'];
 }

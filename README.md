@@ -5,11 +5,14 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/onelearningcommunity/grease.svg)](https://packagist.org/packages/onelearningcommunity/grease)
 [![License](https://img.shields.io/packagist/l/onelearningcommunity/grease.svg)](LICENSE)
 
-**Opt-in performance for Laravel's hot paths — built from optimizations declined upstream.**
+**Opt-in performance across Laravel's hot paths — a menu of byte-identical tiers, built from optimizations declined upstream.**
 
-Grease speeds up the work Eloquent repeats on every request — attribute hydration,
-casting, serialization — with **byte-identical output** to vanilla. Add a trait to the
-models you care about; leave the rest untouched. Zero framework changes.
+Grease is a menu of independent, **byte-identical** optimizations spanning the whole request
+lifecycle — Eloquent hydration/casting/serialization, the event dispatcher, the Blade
+compiler, `config()` reads, validation, the container, the request, and the router. They share one idea: Laravel re-derives the same stable facts on every row,
+attribute, component, render, request, and query; Grease computes each once and reuses it.
+Take the tiers whose hot paths you actually run — the model trait is the zero-config on-ramp,
+not the whole package. Zero framework changes; anything that doesn't opt in runs pure vanilla.
 
 📖 **[Full documentation →](https://one-learning-community.github.io/grease/)**
 
@@ -28,24 +31,25 @@ class User extends Model
 }
 ```
 
-That's the whole setup for the model tiers — no config, no provider, no cache to warm.
-The model's hydration, casting, and serialization now run the greased fast paths, and its
-output stays byte-identical to vanilla Eloquent. Prefer inheritance? Extend
-`\Grease\GreasedModel` instead.
+That's the model tier — the easiest win and a fine place to stop: no config, no provider, no
+cache to warm. Its hydration, casting, and serialization now run the greased fast paths,
+byte-identical to vanilla Eloquent. Prefer inheritance? Extend `\Grease\GreasedModel` instead.
 
-Two further strands go beyond the model trait, each opt-in via a (non-auto-discovered)
+The rest of Grease lives across the request, not just in Eloquent. Each tier is a separate
+opt-in — take the ones whose hot paths you run. Several are a single (non-auto-discovered)
 provider:
 
 ```php
 // bootstrap/providers.php, or the providers array in config/app.php
-Grease\Events\GreaseEventServiceProvider::class,   // faster event dispatcher, app-wide
-Grease\View\GreaseViewServiceProvider::class,      // faster Blade component render
-Grease\Config\GreaseConfigServiceProvider::class,  // memoized config() reads (+ grease:config-cache)
+Grease\Events\GreaseEventServiceProvider::class,         // faster event dispatcher, app-wide
+Grease\View\GreaseViewServiceProvider::class,            // faster Blade render (+ grease:view-cache)
+Grease\Config\GreaseConfigServiceProvider::class,        // memoized config() reads (+ grease:config-cache)
+Grease\Validation\GreaseValidationServiceProvider::class, // memoized validation rule parsing
 ```
 
-Two further **foundation** tiers go deeper into the request lifecycle. They can't be a
+A few more **foundation** tiers go deeper into the request lifecycle. They can't be a
 provider (they're constructed before any provider runs), so each is a one-line swap at the
-application's own entry point — the most invasive opt-in, taken only if you want it:
+application's own entry point — the heaviest opt-in, taken only if you want it:
 
 ```php
 // bootstrap/app.php — greased container (faster dependency resolution)
@@ -53,10 +57,21 @@ return Grease\Container\Application::configure(basePath: dirname(__DIR__))/* …
 
 // public/index.php — greased request (memoized input() / all())
 $request = Grease\Http\Request::capture();
+
+// bootstrap/app.php — greased router (cached middleware resolve+sort), before return
+Grease\Routing\Router::swap($app);
 ```
 
-See [The Container](https://one-learning-community.github.io/grease/guide/container) and
-[The Request](https://one-learning-community.github.io/grease/guide/request).
+The router additionally has an eager, opcache-interned middleware index — register
+`Grease\Routing\GreaseRoutingServiceProvider::class` and deploy with `php artisan grease:route-cache`
+(a `route:cache` twin) to make FPM middleware resolution ~free. The view tier has the same: deploy
+with `php artisan grease:view-cache` (a `view:cache` twin) and view resolution becomes an
+opcache-interned lookup — no per-render filesystem stat-walk.
+
+See [The Container](https://one-learning-community.github.io/grease/guide/container),
+[The Request](https://one-learning-community.github.io/grease/guide/request),
+[The Router](https://one-learning-community.github.io/grease/guide/routing), and
+[The View Cache](https://one-learning-community.github.io/grease/guide/view-cache).
 
 ## What you get
 
@@ -70,6 +85,8 @@ Representative deltas, measured on Linux ([reproduce on your own build](https://
 - **Blade** (render path, app-wide): −28.3% simple / −23.4% rich component renders, −26.8% a `$loop`-heavy table, −20.3% a layout — byte-identical HTML.
 - **Config** (`config()` reads, app-wide): a memoized read path (`−65%` on a repeat-heavy mix), and an opcache-interned flat index via `grease:config-cache` that cuts `~88%` of config-read time — a per-request win that scales with how many reads your app makes (real apps make thousands).
 - **Foundation tiers** (container & request, app-entry opt-in): −38.8% per container resolve, −41% per input-heavy request. Layered with everything above, a real mixed page-load (JSON + Blade) request suite stacks to **~−47% end-to-end** for **~+2% retained memory** — see the [cumulative-stack table](https://one-learning-community.github.io/grease/guide/benchmarks#the-whole-stack-compounding).
+- **Router** (middleware resolve+sort, app-entry opt-in): once-per-request work, so small in isolation — but pure waste removed on every request. The lazy cache halves it; the eager `grease:route-cache` index takes it to ~−96% (FPM ≈ Octane steady-state). Compounds with request volume.
+- **View cache** (`grease:view-cache`, provider opt-in): the resolution `view:cache` throws away. An opcache-interned name→path index turns each view lookup from a filesystem stat-walk into an array hit (20 views: 0 `file_exists` calls vs 20), and permanently kills the never-memoized dynamic-view miss — even under Octane.
 
 These are `:memory:`/Linux figures — read them as Grease's share of the work, not your p99,
 and reproduce on your target. The [Benchmarks guide](https://one-learning-community.github.io/grease/guide/benchmarks)
@@ -94,7 +111,7 @@ composer bench    # phpbench per-op A/B + the SQL suite
 - **[How It Works](https://one-learning-community.github.io/grease/guide/how-it-works)** — the per-class blueprint and each tier
 - **[Benchmarks](https://one-learning-community.github.io/grease/guide/benchmarks)** — full numbers, methodology, and reproducing them on your build
 - **[The Method](https://one-learning-community.github.io/grease/guide/method)** — how a win is found and proven (and how the dead ends got rejected)
-- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** — the beyond-Eloquent tiers
+- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** · **[Validation](https://one-learning-community.github.io/grease/guide/validation)** · **[The Router](https://one-learning-community.github.io/grease/guide/routing)** · **[The View Cache](https://one-learning-community.github.io/grease/guide/view-cache)** — the beyond-Eloquent tiers
 - **[Caveats & Narrowing](https://one-learning-community.github.io/grease/guide/caveats)** — the two small, obscure things that change
 
 ## Requirements

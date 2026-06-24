@@ -23,6 +23,7 @@ use Grease\Bench\Support\BootsEloquent;
 use Grease\Concerns\HasGrease;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Carbon;
 
 $rows = (int) ($argv[1] ?? 150);
 $iters = (int) ($argv[2] ?? 1500);
@@ -41,21 +42,30 @@ $capsule->schema()->create('users', function (Blueprint $t) {
 class FDVanilla extends Model
 {
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'score' => 'decimal:2', 'email_verified_at' => 'datetime'];
 }
 // A: HasGrease but fromDateTime() forced back to vanilla (class method shadows the trait's).
 class FDA extends Model
 {
     use HasGrease;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'score' => 'decimal:2', 'email_verified_at' => 'datetime'];
-    public function fromDateTime($value) { return parent::fromDateTime($value); }
+
+    public function fromDateTime($value)
+    {
+        return parent::fromDateTime($value);
+    }
 }
 // B: HasGrease (fast path live).
 class FDB extends Model
 {
     use HasGrease;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'score' => 'decimal:2', 'email_verified_at' => 'datetime'];
 }
 
@@ -68,7 +78,7 @@ foreach (array_chunk($seed, 500) as $c) {
     $capsule->table('users')->insert($c);
 }
 
-\Illuminate\Support\Carbon::setTestNow('2026-01-01 12:00:00');
+Carbon::setTestNow('2026-01-01 12:00:00');
 
 // Parity: the dirty set + stored output of a mutate+save must match vanilla, byte for byte.
 $run = function (string $class) use ($rows, $conn) {
@@ -112,6 +122,7 @@ $bench = function (string $class) use ($rows, $iters, $conn) {
     for ($i = 0; $i < $iters; $i++) {
         $warm();
     }
+
     return (hrtime(true) - $t0) / 1e9;
 };
 
@@ -127,4 +138,4 @@ for ($r = 0; $r < $repeats; $r++) {
 }
 printf("\nfast-path vs vanilla-fromDateTime:   %+.1f%%   (mean of %d repeats)\n", ($tb - $ta) / $ta * 100, $repeats);
 
-\Illuminate\Support\Carbon::setTestNow();
+Carbon::setTestNow();

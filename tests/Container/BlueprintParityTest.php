@@ -11,8 +11,9 @@ use Grease\Tests\Fixtures\Container\FileLogger;
 use Grease\Tests\Fixtures\Container\LoggerContract;
 use Grease\Tests\Fixtures\Container\NeedsPrimitive;
 use Grease\Tests\Fixtures\Container\NoCtor;
-use Grease\Tests\Fixtures\Container\NullLogger;
 use Grease\Tests\Fixtures\Container\NullableDep;
+use Grease\Tests\Fixtures\Container\NullLogger;
+use Illuminate\Container\Container;
 use Illuminate\Container\Container as VanillaContainer;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -25,7 +26,7 @@ use PHPUnit\Framework\TestCase;
  * `$with` overrides, singletons, rebinding (proving resolved instances are NOT cached),
  * and the unresolvable/throw paths.
  *
- * Oracle = vanilla {@see \Illuminate\Container\Container}. Each case runs against a fresh
+ * Oracle = vanilla {@see Container}. Each case runs against a fresh
  * instance of each container and the canonical results must be identical. Shares the
  * fixtures with `benchmarks/container_build_ab.php`, so the bench times exactly what
  * these tests prove identical.
@@ -36,7 +37,7 @@ class BlueprintParityTest extends TestCase
      * Each case returns a canonical, comparable representation of a resolution. Keep in
      * lockstep with `benchmarks/container_build_ab.php::cases()`.
      *
-     * @return array<string, array{0: callable(\Illuminate\Container\Container): mixed}>
+     * @return array<string, array{0: callable(Container): mixed}>
      */
     public static function cases(): array
     {

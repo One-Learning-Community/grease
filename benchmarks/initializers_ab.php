@@ -19,13 +19,13 @@
 
 require __DIR__.'/../vendor/autoload.php';
 
+use Grease\Bench\Support\BootsEloquent;
 use Grease\Concerns\HasGreasedAttributes;
 use Grease\Concerns\HasGreasedCasts;
 use Grease\Concerns\HasGreasedClassAttributes;
 use Grease\Concerns\HasGreasedHydration;
 use Grease\Concerns\HasGreasedInitializers;
 use Grease\Concerns\HasGreasedSerialization;
-use Grease\Bench\Support\BootsEloquent;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 
@@ -36,21 +36,21 @@ $iters = (int) ($argv[3] ?? 4000);
 // A: the five tiers shipped before this one — everything HasGrease has MINUS the freeze.
 trait HasGreasePrior
 {
-    use HasGreasedHydration;
     use HasGreasedAttributes;
-    use HasGreasedClassAttributes;
     use HasGreasedCasts;
+    use HasGreasedClassAttributes;
+    use HasGreasedHydration;
     use HasGreasedSerialization;
 }
 
 // B: the full six-tier stack (prior five + the booter freeze).
 trait HasGreaseFull
 {
-    use HasGreasedHydration;
     use HasGreasedAttributes;
-    use HasGreasedClassAttributes;
-    use HasGreasedInitializers;
     use HasGreasedCasts;
+    use HasGreasedClassAttributes;
+    use HasGreasedHydration;
+    use HasGreasedInitializers;
     use HasGreasedSerialization;
 }
 
@@ -75,12 +75,18 @@ $schema->create('posts', function (Blueprint $t) {
 class VUser extends Model
 {
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer'];
-    public function posts() { return $this->hasMany(VPost::class, 'user_id'); }
+
+    public function posts()
+    {
+        return $this->hasMany(VPost::class, 'user_id');
+    }
 }
 class VPost extends Model
 {
     protected $table = 'posts';
+
     protected $casts = ['view_count' => 'integer'];
 }
 
@@ -88,14 +94,22 @@ class VPost extends Model
 class AUser extends Model
 {
     use HasGreasePrior;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer'];
-    public function posts() { return $this->hasMany(APost::class, 'user_id'); }
+
+    public function posts()
+    {
+        return $this->hasMany(APost::class, 'user_id');
+    }
 }
 class APost extends Model
 {
     use HasGreasePrior;
+
     protected $table = 'posts';
+
     protected $casts = ['view_count' => 'integer'];
 }
 
@@ -103,14 +117,22 @@ class APost extends Model
 class BUser extends Model
 {
     use HasGreaseFull;
+
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer'];
-    public function posts() { return $this->hasMany(BPost::class, 'user_id'); }
+
+    public function posts()
+    {
+        return $this->hasMany(BPost::class, 'user_id');
+    }
 }
 class BPost extends Model
 {
     use HasGreaseFull;
+
     protected $table = 'posts';
+
     protected $casts = ['view_count' => 'integer'];
 }
 
@@ -154,6 +176,7 @@ $bench = function (string $label, callable $query) use ($iters) {
     }
     $dt = (hrtime(true) - $t0) / 1e9;
     printf("  %-16s %7.3f s   (%.1f get()/s)   sink=%d\n", $label, $dt, $iters / $dt, $sink);
+
     return $dt;
 };
 

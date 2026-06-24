@@ -24,6 +24,7 @@ use Grease\Concerns\HasGrease;
 use Grease\Events\Dispatcher as GreaseDispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Carbon;
 
 if (! extension_loaded('excimer')) {
     fwrite(STDERR, "excimer not loaded.\n");
@@ -62,24 +63,42 @@ $schema->create('posts', function (Blueprint $t) {
 class RwUser extends Model
 {
     protected $table = 'users';
+
     protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
-    public function posts() { return $this->hasMany(RwPost::class, 'user_id'); }
+
+    public function posts()
+    {
+        return $this->hasMany(RwPost::class, 'user_id');
+    }
 }
 class RwPost extends Model
 {
     protected $table = 'posts';
+
     protected $casts = ['view_count' => 'integer', 'is_published' => 'boolean', 'published_at' => 'datetime', 'meta' => 'array'];
-    public function user() { return $this->belongsTo(RwUser::class, 'user_id'); }
+
+    public function user()
+    {
+        return $this->belongsTo(RwUser::class, 'user_id');
+    }
 }
 class GreasedRwUser extends RwUser
 {
     use HasGrease;
-    public function posts() { return $this->hasMany(GreasedRwPost::class, 'user_id'); }
+
+    public function posts()
+    {
+        return $this->hasMany(GreasedRwPost::class, 'user_id');
+    }
 }
 class GreasedRwPost extends RwPost
 {
     use HasGrease;
-    public function user() { return $this->belongsTo(GreasedRwUser::class, 'user_id'); }
+
+    public function user()
+    {
+        return $this->belongsTo(GreasedRwUser::class, 'user_id');
+    }
 }
 
 $now = '2026-01-01 00:00:00';
@@ -126,7 +145,7 @@ $WORKLOADS = [
 ];
 
 Model::setEventDispatcher(new GreaseDispatcher($capsule->getContainer()));
-\Illuminate\Support\Carbon::setTestNow('2026-01-01 12:00:00');
+Carbon::setTestNow('2026-01-01 12:00:00');
 
 $endpoints = $only === 'all' ? array_keys($WORKLOADS) : [$only];
 
@@ -165,4 +184,4 @@ foreach ($endpoints as $name) {
     }
 }
 
-\Illuminate\Support\Carbon::setTestNow();
+Carbon::setTestNow();

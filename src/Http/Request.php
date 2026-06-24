@@ -7,7 +7,7 @@ use Illuminate\Http\Request as BaseRequest;
 /**
  * Greased HTTP request with per-instance input memoization.
  *
- * Behaviour-identical to {@see \Illuminate\Http\Request}; `input()`/`all()`/`isJson()`
+ * Behaviour-identical to {@see BaseRequest}; `input()`/`all()`/`isJson()`
  * and everything that funnels through them (`__get`, `has`, `only`, `filled`, …) read a
  * memoized merged map instead of rebuilding it per call. See {@see MemoizesRequestInput}.
  *

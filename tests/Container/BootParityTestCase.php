@@ -3,12 +3,13 @@
 namespace Grease\Tests\Container;
 
 use Grease\Tests\Fixtures\Container\SpikeController;
+use Illuminate\Foundation\Application;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 /**
  * Shared boot-parity scaffold. Concrete subclasses differ only in which container the
  * fully-configured Testbench application is built on — vanilla
- * {@see \Illuminate\Foundation\Application} vs {@see \Grease\Container\Application}. Both
+ * {@see Application} vs {@see \Grease\Container\Application}. Both
  * serve the SAME route and must return the SAME byte-identical response.
  *
  * This is the container tier's equivalent of the model parity suite: the served output

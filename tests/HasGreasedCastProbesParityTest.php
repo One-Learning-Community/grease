@@ -2,13 +2,15 @@
 
 namespace Grease\Tests;
 
+use Grease\Concerns\HasGreasedCastProbes;
 use Grease\Tests\Fixtures\GreasedSample;
 use Grease\Tests\Fixtures\SampleData;
+use Grease\Tests\Fixtures\Status;
 use Grease\Tests\Fixtures\VanillaSample;
 use ReflectionMethod;
 
 /**
- * {@see \Grease\Concerns\HasGreasedCastProbes} memoizes the per-key cast-classification
+ * {@see HasGreasedCastProbes} memoizes the per-key cast-classification
  * probes (`isEnumCastable` / `isClassCastable` / `isClassSerializable`) that
  * `addCastAttributesToArray()` runs on every row. The contract is byte-for-byte identical
  * classification: for every cast key — primitive, date, enum, custom-class — the greased
@@ -78,9 +80,9 @@ class HasGreasedCastProbesParityTest extends TestCase
         $greased = new GreasedSample;
         $this->assertFalse($this->probe($greased, 'isEnumCastable', 'free_key'));
 
-        $greased->mergeCasts(['free_key' => \Grease\Tests\Fixtures\Status::class]);
+        $greased->mergeCasts(['free_key' => Status::class]);
         $vanilla = new VanillaSample;
-        $vanilla->mergeCasts(['free_key' => \Grease\Tests\Fixtures\Status::class]);
+        $vanilla->mergeCasts(['free_key' => Status::class]);
 
         $this->assertSame(
             $this->probe($vanilla, 'isEnumCastable', 'free_key'),

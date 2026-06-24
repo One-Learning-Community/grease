@@ -26,6 +26,7 @@ require __DIR__.'/../vendor/autoload.php';
 use Grease\Container\Application as GreasedApplication;
 use Grease\Tests\Fixtures\Container\SpikeController;
 use Illuminate\Contracts\Http\Kernel as HttpKernelContract;
+use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
 use Illuminate\Http\Request;
 use Orchestra\Testbench\Foundation\Application as TestbenchResolver;
@@ -57,11 +58,26 @@ final class GreasedTestbenchResolver extends TestbenchResolver
 class HLeafA {}
 class HLeafB {}
 class HLeafC {}
-class HSvc1 { public function __construct(public HLeafA $a, public HLeafB $b) {} }
-class HSvc2 { public function __construct(public HLeafB $b, public HLeafC $c) {} }
-class HSvc3 { public function __construct(public HLeafA $a) {} }
-class HSvc4 { public function __construct(public HSvc1 $s1, public HLeafC $c) {} }
-class HSvc5 { public function __construct(public HSvc2 $s2, public HSvc3 $s3) {} }
+class HSvc1
+{
+    public function __construct(public HLeafA $a, public HLeafB $b) {}
+}
+class HSvc2
+{
+    public function __construct(public HLeafB $b, public HLeafC $c) {}
+}
+class HSvc3
+{
+    public function __construct(public HLeafA $a) {}
+}
+class HSvc4
+{
+    public function __construct(public HSvc1 $s1, public HLeafC $c) {}
+}
+class HSvc5
+{
+    public function __construct(public HSvc2 $s2, public HSvc3 $s3) {}
+}
 
 class HeavyController
 {
@@ -71,8 +87,7 @@ class HeavyController
         public HSvc3 $c,
         public HSvc4 $d,
         public HSvc5 $e,
-    ) {
-    }
+    ) {}
 
     public function show(Request $request, HSvc4 $injected): array
     {
@@ -89,7 +104,7 @@ if (($arm = $argv[1] ?? null) === '--arm') {
     $base = TestbenchResolver::applicationBasePath();
 
     $bootStart = hrtime(true);
-    /** @var \Illuminate\Foundation\Application $app */
+    /** @var Application $app */
     $app = $resolverClass::create($base);
     $bootMs = (hrtime(true) - $bootStart) / 1e6;
 
@@ -170,7 +185,7 @@ $runArm = function (string $resolverClass) use ($php, $self, $iterations, $round
 
 echo "Booting Testbench skeleton, vanilla vs greased container ($rounds rounds × $iterations dispatches)...\n\n";
 
-$vanilla = $runArm(\Orchestra\Testbench\Foundation\Application::class);
+$vanilla = $runArm(TestbenchResolver::class);
 $greased = $runArm(GreasedTestbenchResolver::class);
 
 // ---- Parity gate ---------------------------------------------------------------

@@ -64,6 +64,9 @@ export default defineConfig({
             { text: 'The Container', link: '/guide/container' },
             { text: 'The Request', link: '/guide/request' },
             { text: 'The Config Repository', link: '/guide/config' },
+            { text: 'Validation', link: '/guide/validation' },
+            { text: 'The Router', link: '/guide/routing' },
+            { text: 'The View Cache', link: '/guide/view-cache' },
           ],
         },
         {
