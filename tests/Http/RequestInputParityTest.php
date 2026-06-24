@@ -198,6 +198,24 @@ class RequestInputParityTest extends TestCase
         );
     }
 
+    public function test_isjson_reflects_a_live_content_type_change(): void
+    {
+        // isJson() reads the content-type header, which can change after construction
+        // (content-negotiation / normalization middleware). It must not be frozen at
+        // its first observed value — vanilla re-reads the header every call.
+        $vanilla = VanillaRequest::create('/x', 'POST', [], [], [], [], '{"a":1}');
+        $greased = GreasedRequest::create('/x', 'POST', [], [], [], [], '{"a":1}');
+
+        $this->assertFalse($vanilla->isJson(), 'sanity: no content-type yet');
+        $this->assertSame($vanilla->isJson(), $greased->isJson(), 'before the header change');
+
+        $vanilla->headers->set('CONTENT_TYPE', 'application/json');
+        $greased->headers->set('CONTENT_TYPE', 'application/json');
+
+        $this->assertTrue($vanilla->isJson(), 'sanity: vanilla reflects the change');
+        $this->assertSame($vanilla->isJson(), $greased->isJson(), 'greased must reflect the live content-type');
+    }
+
     /**
      * Bags OUTSIDE the input surface may be mutated directly without affecting the memo —
      * `attributes` (route params / middleware context) and `cookies` feed none of
