@@ -1,17 +1,14 @@
 # Keep the distributed package lean — exclude dev-only paths from the
 # `composer require` dist archive. GitHub/Packagist honor export-ignore.
-/.github                              export-ignore
-/.gitattributes                       export-ignore
-/.gitignore                           export-ignore
-/benchmarks                           export-ignore
-/docs                                 export-ignore
-/tests                                export-ignore
-/phpbench.json                        export-ignore
-/phpunit.xml.dist                     export-ignore
-/NOTES.md                             export-ignore
-/SERIALIZATION-TIER.md                export-ignore
-/ALIAS-DEDUP-TIER-RESEARCH.md         export-ignore
-/ENUM-CAST-TIER-RESEARCH.md           export-ignore
-/FILL-TIER-RESEARCH.md                export-ignore
-/HIDDEN-VISIBLE-TIER-RESEARCH.md      export-ignore
-/PERSISTED-BLUEPRINT-TIER-RESEARCH.md export-ignore
+# NB: this strips files from the installed dist tarball only; it does NOT
+# hide them from the GitHub repo or Packagist's source listing.
+/.github          export-ignore
+/.gitattributes   export-ignore
+/.gitignore       export-ignore
+/benchmarks       export-ignore
+/docs             export-ignore
+/storage          export-ignore
+/tests            export-ignore
+/phpbench.json    export-ignore
+/phpunit.xml.dist export-ignore
+/*.md             export-ignore
