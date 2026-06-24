@@ -8,6 +8,23 @@ All notable changes to `grease` are documented here. The format is based on
 
 ### Added
 
+- **`grease:view-cache` — an eager, opcache-interned view-resolution index.** `view:cache` compiles
+  every Blade template but discards the *resolution* it computed: at runtime `FileViewFinder::find()`
+  re-stat-walks `paths × extensions` to map a view name to its file (and never memoizes a miss, so
+  dynamic / `@include($var)` / `<x-dynamic-component>` names re-stat on every render forever), and the
+  engine re-hashes the path per render. `grease:view-cache` (a `view:cache` twin) records `name =>
+  source path` and `source path => compiled path` into a constant `return [...]` file opcache interns
+  into shared memory; `Grease\View\GreaseViewServiceProvider` seeds a greased `FileViewFinder`
+  (`find()` = array hit ?? live `parent::find()`, in its own property so it survives `flush()`/Octane)
+  and the compiled-path memo from it when fresh. Byte-identical by construction (each entry is what the
+  live finder/compiler returned at build time, so view precedence is captured automatically); a name
+  not in the index resolves live. The honest metric is the stat count — 20 views resolve with 0
+  `file_exists()` calls vs 20 (Linux: 13.2µs → 1.0µs/request) — and the never-memoized miss is a
+  permanent win even under Octane. Freshness-guarded against the compiled-view + config caches (a later
+  `view:cache`/`config:cache`/`optimize` disables a stale index); inert in development. Opt in via the
+  existing `Grease\View\GreaseViewServiceProvider` + `php artisan grease:view-cache` at deploy. Parity:
+  `GreasedViewFinderTest` + `GreaseViewCacheTest`.
+
 - **A greased router — cached middleware resolve+sort.** For the matched route,
   `Router::resolveMiddleware()` expands groups/aliases and sorts via `SortedMiddleware`
   (`class_implements()` + `class_parents()` per middleware) twice per request — uncached, on top

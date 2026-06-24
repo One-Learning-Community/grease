@@ -39,7 +39,7 @@ provider:
 ```php
 // bootstrap/providers.php, or the providers array in config/app.php
 Grease\Events\GreaseEventServiceProvider::class,   // faster event dispatcher, app-wide
-Grease\View\GreaseViewServiceProvider::class,      // faster Blade component render
+Grease\View\GreaseViewServiceProvider::class,      // faster Blade component render (+ grease:view-cache)
 Grease\Config\GreaseConfigServiceProvider::class,  // memoized config() reads (+ grease:config-cache)
 ```
 
@@ -60,11 +60,14 @@ Grease\Routing\Router::swap($app);
 
 The router additionally has an eager, opcache-interned middleware index — register
 `Grease\Routing\GreaseRoutingServiceProvider::class` and deploy with `php artisan grease:route-cache`
-(a `route:cache` twin) to make FPM middleware resolution ~free.
+(a `route:cache` twin) to make FPM middleware resolution ~free. The view tier has the same: deploy
+with `php artisan grease:view-cache` (a `view:cache` twin) and view resolution becomes an
+opcache-interned lookup — no per-render filesystem stat-walk.
 
 See [The Container](https://one-learning-community.github.io/grease/guide/container),
-[The Request](https://one-learning-community.github.io/grease/guide/request), and
-[The Router](https://one-learning-community.github.io/grease/guide/routing).
+[The Request](https://one-learning-community.github.io/grease/guide/request),
+[The Router](https://one-learning-community.github.io/grease/guide/routing), and
+[The View Cache](https://one-learning-community.github.io/grease/guide/view-cache).
 
 ## What you get
 
@@ -79,6 +82,7 @@ Representative deltas, measured on Linux ([reproduce on your own build](https://
 - **Config** (`config()` reads, app-wide): a memoized read path (`−65%` on a repeat-heavy mix), and an opcache-interned flat index via `grease:config-cache` that cuts `~88%` of config-read time — a per-request win that scales with how many reads your app makes (real apps make thousands).
 - **Foundation tiers** (container & request, app-entry opt-in): −38.8% per container resolve, −41% per input-heavy request. Layered with everything above, a real mixed page-load (JSON + Blade) request suite stacks to **~−47% end-to-end** for **~+2% retained memory** — see the [cumulative-stack table](https://one-learning-community.github.io/grease/guide/benchmarks#the-whole-stack-compounding).
 - **Router** (middleware resolve+sort, app-entry opt-in): once-per-request work, so small in isolation — but pure waste removed on every request. The lazy cache halves it; the eager `grease:route-cache` index takes it to ~−96% (FPM ≈ Octane steady-state). Compounds with request volume.
+- **View cache** (`grease:view-cache`, provider opt-in): the resolution `view:cache` throws away. An opcache-interned name→path index turns each view lookup from a filesystem stat-walk into an array hit (20 views: 0 `file_exists` calls vs 20), and permanently kills the never-memoized dynamic-view miss — even under Octane.
 
 These are `:memory:`/Linux figures — read them as Grease's share of the work, not your p99,
 and reproduce on your target. The [Benchmarks guide](https://one-learning-community.github.io/grease/guide/benchmarks)
@@ -103,7 +107,7 @@ composer bench    # phpbench per-op A/B + the SQL suite
 - **[How It Works](https://one-learning-community.github.io/grease/guide/how-it-works)** — the per-class blueprint and each tier
 - **[Benchmarks](https://one-learning-community.github.io/grease/guide/benchmarks)** — full numbers, methodology, and reproducing them on your build
 - **[The Method](https://one-learning-community.github.io/grease/guide/method)** — how a win is found and proven (and how the dead ends got rejected)
-- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** · **[The Router](https://one-learning-community.github.io/grease/guide/routing)** — the beyond-Eloquent tiers
+- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** · **[The Router](https://one-learning-community.github.io/grease/guide/routing)** · **[The View Cache](https://one-learning-community.github.io/grease/guide/view-cache)** — the beyond-Eloquent tiers
 - **[Caveats & Narrowing](https://one-learning-community.github.io/grease/guide/caveats)** — the two small, obscure things that change
 
 ## Requirements

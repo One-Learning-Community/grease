@@ -65,6 +65,7 @@ export default defineConfig({
             { text: 'The Request', link: '/guide/request' },
             { text: 'The Config Repository', link: '/guide/config' },
             { text: 'The Router', link: '/guide/routing' },
+            { text: 'The View Cache', link: '/guide/view-cache' },
           ],
         },
         {

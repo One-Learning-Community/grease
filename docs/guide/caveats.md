@@ -67,12 +67,12 @@ byte-identity, it hands the work back to the framework:
 
 All of the above produce identical output; they simply don't get the fast path.
 
-## The foundation tiers (container, request, config & router)
+## The foundation tiers (container, request, config, router & view index)
 
 These are a *different axis* from the model traits, with their own opt-in — see
 [The Container](/guide/container), [The Request](/guide/request),
-[The Config Repository](/guide/config), and [The Router](/guide/routing). Their narrowing
-is minimal:
+[The Config Repository](/guide/config), [The Router](/guide/routing), and
+[The View Cache](/guide/view-cache). Their narrowing is minimal:
 
 - **Container** — none beyond the opt-in itself. The blueprint caches reflection, not
   resolution, so contextual bindings, `$with` overrides, and late rebinds all stay live;
@@ -102,8 +102,16 @@ is minimal:
   it's inert in development (no route cache) — so a wrong list is never served, you only lose the
   eager win until you re-run `grease:route-cache`. A route whose middleware is assigned dynamically
   simply misses the index and resolves live.
+- **View index** — the lazy Blade greasing (the `view`/`blade.compiler` swaps) has **no
+  carve-out**. The eager `grease:view-cache` index adds the same one contract as the others:
+  **build == runtime** — it's a deploy artifact, so rebuild it on deploy. A structural view change
+  (add / move / delete) needs a rebuild, exactly like `view:cache` itself (in-place edits don't —
+  the name→path mapping is unchanged and recompilation stays with the framework). The freshness
+  guard disables a stale index after any `view:cache` / `config:cache` / `optimize`; it's inert in
+  development (no artifact); and a name the index doesn't contain — added, dynamic, or non-Blade —
+  resolves live, byte-identical. So a wrong path is never served.
 
-All four are opt-in independently of everything else. Not confident? Don't take them — the
+All five are opt-in independently of everything else. Not confident? Don't take them — the
 model, event, and Blade tiers all work without them.
 
 ## Want zero cast caveats at all?
