@@ -55,6 +55,18 @@ class GreasedSetter extends VanillaSetter
     use HasGrease;
 }
 
+// --- Timestamps toggle (getDates per-instance input). --------------------------
+class VanillaTimestampsModel extends Model
+{
+    protected $table = 'tsm';
+}
+class GreasedTimestampsModel extends Model
+{
+    use HasGrease;
+
+    protected $table = 'tsm';
+}
+
 /**
  * The runtime-divergence and edge-shape guarantees: a greased model must stay
  * correct when casts change at runtime, when subclasses differ, and when
@@ -147,6 +159,67 @@ class RuntimeBehaviorTest extends TestCase
 
         $this->assertSame($v->getAttributes(), $g->getAttributes());
         $this->assertSame('ABC', $g->getAttributes()['code']);
+    }
+
+    public function test_getdates_memo_is_not_poisoned_by_a_timestamps_disabled_instance(): void
+    {
+        // $model->timestamps = false / withoutTimestamps() is normal Eloquent. A
+        // timestamps-off instance must not poison the per-class getDates() cache for
+        // timestamps-on instances — that would drop created_at/updated_at from toArray().
+        GreasedTimestampsModel::flushGreaseBlueprint();
+
+        $off = new GreasedTimestampsModel;
+        $off->timestamps = false;
+        $this->assertSame([], $off->getDates(), 'timestamps-off instance has no dates');
+
+        $on = new GreasedTimestampsModel;          // timestamps default on
+        $vanilla = new VanillaTimestampsModel;
+
+        $this->assertSame($vanilla->getDates(), $on->getDates(), 'timestamps-on instance must still date its timestamps');
+        $this->assertSame(['created_at', 'updated_at'], $on->getDates());
+    }
+
+    public function test_getcasts_is_not_frozen_by_runtime_setkeyname(): void
+    {
+        // primaryKey/keyType/incrementing are class properties in normal use (read
+        // correctly at first getCasts). The runtime setters are unusual, but if used
+        // they must still invalidate the per-class cast cache, not serve a stale key.
+        $g = (new GreasedSample)->newFromBuilder($this->sampleRow());
+        $g->getCasts();                       // warm the blueprint with the default 'id' key
+        $g->setKeyName('uuid');
+
+        $v = (new VanillaSample)->newFromBuilder($this->sampleRow());
+        $v->setKeyName('uuid');
+
+        $this->assertSame($v->getCasts(), $g->getCasts(), 'stale key entry after setKeyName');
+        $this->assertArrayHasKey('uuid', $g->getCasts());
+        $this->assertArrayNotHasKey('id', $g->getCasts());
+    }
+
+    public function test_getcasts_is_not_frozen_by_runtime_setincrementing(): void
+    {
+        $g = (new GreasedSample)->newFromBuilder($this->sampleRow());
+        $g->getCasts();
+        $g->setIncrementing(false);
+
+        $v = (new VanillaSample)->newFromBuilder($this->sampleRow());
+        $v->setIncrementing(false);
+
+        $this->assertSame($v->getCasts(), $g->getCasts(), 'stale key entry after setIncrementing(false)');
+        $this->assertArrayNotHasKey('id', $g->getCasts(), 'a non-incrementing model drops the key cast');
+    }
+
+    public function test_a_diverged_key_mutation_does_not_corrupt_other_instances(): void
+    {
+        // setKeyName is per-instance — it must not leak into the per-class cache.
+        $diverged = (new GreasedSample)->newFromBuilder($this->sampleRow());
+        $diverged->getCasts();
+        $diverged->setKeyName('uuid');
+        $diverged->getCasts();
+
+        $fresh = (new GreasedSample)->newFromBuilder($this->sampleRow());
+        $this->assertArrayHasKey('id', $fresh->getCasts(), 'fresh instance keeps the default key');
+        $this->assertArrayNotHasKey('uuid', $fresh->getCasts());
     }
 
     public function test_flush_rebuilds_the_blueprint(): void
