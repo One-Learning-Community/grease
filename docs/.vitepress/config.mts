@@ -35,7 +35,7 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Why', link: '/guide/why' },
       {
-        text: 'v0.1',
+        text: 'v0.5.0',
         items: [
           { text: 'Changelog', link: 'https://github.com/One-Learning-Community/grease/releases' },
           { text: 'Packagist', link: 'https://packagist.org/packages/onelearningcommunity/grease' },
