@@ -5,11 +5,15 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/onelearningcommunity/grease.svg)](https://packagist.org/packages/onelearningcommunity/grease)
 [![License](https://img.shields.io/packagist/l/onelearningcommunity/grease.svg)](LICENSE)
 
-**Opt-in performance for Laravel's hot paths — built from optimizations declined upstream.**
+**Opt-in performance across Laravel's hot paths — a menu of byte-identical tiers, built from optimizations declined upstream.**
 
-Grease speeds up the work Eloquent repeats on every request — attribute hydration,
-casting, serialization — with **byte-identical output** to vanilla. Add a trait to the
-models you care about; leave the rest untouched. Zero framework changes.
+Grease is a menu of independent, **byte-identical** optimizations spanning the whole request
+lifecycle — Eloquent hydration/casting/serialization, the event dispatcher, the Blade
+compiler, `config()` reads, validation, the query grammar, the container, the request, and
+the router. They share one idea: Laravel re-derives the same stable facts on every row,
+attribute, component, render, request, and query; Grease computes each once and reuses it.
+Take the tiers whose hot paths you actually run — the model trait is the zero-config on-ramp,
+not the whole package. Zero framework changes; anything that doesn't opt in runs pure vanilla.
 
 📖 **[Full documentation →](https://one-learning-community.github.io/grease/)**
 
@@ -28,24 +32,26 @@ class User extends Model
 }
 ```
 
-That's the whole setup for the model tiers — no config, no provider, no cache to warm.
-The model's hydration, casting, and serialization now run the greased fast paths, and its
-output stays byte-identical to vanilla Eloquent. Prefer inheritance? Extend
-`\Grease\GreasedModel` instead.
+That's the model tier — the easiest win and a fine place to stop: no config, no provider, no
+cache to warm. Its hydration, casting, and serialization now run the greased fast paths,
+byte-identical to vanilla Eloquent. Prefer inheritance? Extend `\Grease\GreasedModel` instead.
 
-Two further strands go beyond the model trait, each opt-in via a (non-auto-discovered)
+The rest of Grease lives across the request, not just in Eloquent. Each tier is a separate
+opt-in — take the ones whose hot paths you run. Several are a single (non-auto-discovered)
 provider:
 
 ```php
 // bootstrap/providers.php, or the providers array in config/app.php
-Grease\Events\GreaseEventServiceProvider::class,   // faster event dispatcher, app-wide
-Grease\View\GreaseViewServiceProvider::class,      // faster Blade component render (+ grease:view-cache)
-Grease\Config\GreaseConfigServiceProvider::class,  // memoized config() reads (+ grease:config-cache)
+Grease\Events\GreaseEventServiceProvider::class,         // faster event dispatcher, app-wide
+Grease\View\GreaseViewServiceProvider::class,            // faster Blade render (+ grease:view-cache)
+Grease\Config\GreaseConfigServiceProvider::class,        // memoized config() reads (+ grease:config-cache)
+Grease\Validation\GreaseValidationServiceProvider::class, // memoized validation rule parsing
+Grease\Database\GreaseDatabaseServiceProvider::class,    // memoized query-grammar identifier wrapping
 ```
 
-Two further **foundation** tiers go deeper into the request lifecycle. They can't be a
+A few more **foundation** tiers go deeper into the request lifecycle. They can't be a
 provider (they're constructed before any provider runs), so each is a one-line swap at the
-application's own entry point — the most invasive opt-in, taken only if you want it:
+application's own entry point — the heaviest opt-in, taken only if you want it:
 
 ```php
 // bootstrap/app.php — greased container (faster dependency resolution)

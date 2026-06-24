@@ -6,7 +6,28 @@
 - **Laravel** 12 or 13
 
 Grease is a pure userland package. It makes **zero** changes to the framework and
-adds **zero** cost to models that don't opt in.
+adds **zero** cost to anything that doesn't opt in.
+
+## The tiers, at a glance
+
+Grease is a menu, not a monolith. Each tier is an independent opt-in that removes the same
+kind of waste — a stable fact Laravel recomputes per row, per render, per request, or per
+query. Take the ones whose hot paths you actually run; the model trait is just the simplest.
+
+| Tier | How you opt in | What it speeds up |
+|---|---|---|
+| **Model** | `use HasGrease;` | hydration, casting, serialization, dirty-check |
+| [**Events**](/guide/events) | `GreaseEventServiceProvider` | every dispatch, app-wide |
+| [**Blade**](/guide/blade) | `GreaseViewServiceProvider` | `@props` + attribute-merge per component |
+| [**View cache**](/guide/view-cache) | same provider + `grease:view-cache` | view name→path resolution |
+| [**Config**](/guide/config) | `GreaseConfigServiceProvider` (+ `grease:config-cache`) | `config()` reads |
+| **Validation** | `GreaseValidationServiceProvider` | rule parsing per validation |
+| **Query grammar** | `GreaseDatabaseServiceProvider` | identifier wrapping per query |
+| [**Container**](/guide/container) | `Grease\Container\Application` in `bootstrap/app.php` | constructor reflection per resolve |
+| [**Request**](/guide/request) | `Grease\Http\Request::capture()` in `public/index.php` | `input()` / `all()` per access |
+| [**Router**](/guide/routing) | `Grease\Routing\Router::swap($app)` (+ `grease:route-cache`) | middleware resolve + sort |
+
+Everything below walks each one. None are auto-discovered — opting in is always deliberate.
 
 ## Install
 
@@ -101,11 +122,54 @@ or immediately after `php artisan view:clear`. Output stays byte-identical.
 
 See [Blade Components](/guide/blade) for what it does and what it's worth.
 
+It pairs with an eager **view-resolution cache**: deploy with `php artisan grease:view-cache`
+(a drop-in `view:cache` twin) and a view's name→path lookup becomes an opcache-interned array
+hit instead of a per-render filesystem stat-walk. See [The View Cache](/guide/view-cache).
+
+## Faster config, validation, and queries (optional, app-wide)
+
+Three more provider-based tiers, each one line in `bootstrap/providers.php` and **not**
+auto-discovered:
+
+```php
+Grease\Config\GreaseConfigServiceProvider::class,         // memoized config() reads
+Grease\Validation\GreaseValidationServiceProvider::class, // memoized validation rule parsing
+Grease\Database\GreaseDatabaseServiceProvider::class,     // memoized query-grammar identifier wrapping
+```
+
+- **Config** memoizes resolved `config()` values; pair it with `php artisan grease:config-cache`
+  (a `config:cache` twin) for an opcache-interned flat index where every leaf read is a hash hit.
+  See [The Config Repository](/guide/config).
+- **Validation** memoizes rule parsing across a validator's run — same pass/fail, same messages.
+- **Query grammar** memoizes identifier wrapping (`"posts"."id"`) for the MySQL, MariaDB, and
+  PostgreSQL grammars; other drivers fall back to vanilla. Byte-identical SQL.
+
+## The foundation tiers (optional, app-entry)
+
+The container, request, and router are constructed *before* any provider runs, so they can't
+be a provider — each is a one-line swap at the application's own entry point. The heaviest
+opt-in, taken only if you want it:
+
+```php
+// bootstrap/app.php — greased container (constructor-reflection blueprint)
+return Grease\Container\Application::configure(basePath: dirname(__DIR__))/* …->create() */;
+
+// public/index.php — greased request (memoized input() / all())
+$request = Grease\Http\Request::capture();
+
+// bootstrap/app.php — greased router (cached middleware resolve+sort), before returning $app
+Grease\Routing\Router::swap($app);
+```
+
+The router pairs with `php artisan grease:route-cache` (a `route:cache` twin) for an eager,
+opcache-interned middleware index. See [The Container](/guide/container),
+[The Request](/guide/request), and [The Router](/guide/routing).
+
 ## Verify nothing changed
 
 The promise is byte-identical output, so the best "did it work?" check is that your
-responses are *unchanged* while your profiler shows less time in Eloquent. If you
-want proof in your own app, diff a JSON response before and after — it'll be
-identical to the byte.
+responses are *unchanged* while your profiler shows less time in the greased paths
+(hydration, rendering, resolution, whichever tiers you took). If you want proof in your
+own app, diff a response before and after — it'll be identical to the byte.
 
 Next: [How It Works →](/guide/how-it-works)
