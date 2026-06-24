@@ -101,16 +101,18 @@ round-trips, and the freshness-guard matrix (missing / newer / stale / route-cle
 
 Don't expect a headline number on a single request — it's once-per-request work, so the delta is
 microseconds, dwarfed by the model/Blade/SQL tiers. The point is what it removes and where it
-compounds. On the FPM-cold model (per request = dispatch + terminate resolve), the lazy tier cuts
-that work roughly in half (it banks the terminate hit); the eager index takes it to **~−96% vs the
-lazy tier** (and ~−98% vs vanilla) — essentially eliminating middleware resolution as a request
-cost. Multiply by your request rate and worker count and it adds up; under Octane the lazy tier
-alone gets there as the cache persists.
+compounds. Measured on Linux (`benchmarks/docker`, opcache + JIT): a single resolve is **6.8µs**
+vanilla, and the lazy cache takes a repeat to **0.10µs (−98.5%)**. On the FPM-cold model (per
+request = dispatch + terminate resolve), vanilla is **13.1µs/request**; the lazy tier roughly halves
+it to 6.8µs (it banks the terminate hit), and the eager index takes it to **0.25µs — −96% vs lazy,
+−98% vs vanilla**, essentially eliminating middleware resolution as a request cost. That's ~13µs
+saved per request — invisible on one request, but pure waste removed on every one: multiply by your
+request rate and worker count. Under Octane the lazy tier alone gets there, as the cache persists.
 
 ::: tip Measure your own
-These are macOS figures (`benchmarks/route_cache_ab.php`, `middleware_ab.php`); CLI opcache is off,
-so the *absolutes* are inflated — read the *ratios* and reproduce magnitudes on your target with
-`benchmarks/docker`, which is still owed for this axis.
+These ratios are confirmed on Linux (`benchmarks/route_cache_ab.php`, `middleware_ab.php`, via
+`benchmarks/docker`, production-shaped opcache + JIT); the µs absolutes are for that box — reproduce
+on your target. macOS CLI inflates the absolutes (opcache off), but the ratios hold.
 :::
 
 ## Memory
