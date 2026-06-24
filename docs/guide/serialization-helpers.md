@@ -79,12 +79,12 @@ The two have **opposite** win profiles, so between them they cover the spectrum:
 | Helper | Win is proportional to… | Best on |
 | --- | --- | --- |
 | `greaseSerializeDate` | number of **date columns** you serialize | thin, date-heavy rows |
-| `greaseSerializeOnly` | columns you **don't** index (`1 − indexed/total`) | wide rows where you pick a few of many |
+| `greaseSerializeOnly` | columns you **skip** (`1 − kept/total`) | wide rows where you pick a few of many |
 
 `greaseSerializeDate` saves roughly one Carbon parse per date column (~5–8 µs), so its
 percentage shrinks as a row's non-date work grows. `greaseSerializeOnly` does the
-reverse — it pays for exactly the columns you skip, so a model that indexes *all* its
-columns gains nothing from it. Sort your models by `indexed/total` to predict where it
+reverse — it pays for exactly the columns you skip, so a model where you serialize *all*
+its columns gains nothing from it. The fewer of a wide row's columns you keep, the more it
 helps.
 
 ## The numbers
@@ -109,13 +109,12 @@ are isolated ops; the figure that matters is your pipeline's, measured end to en
 
 ### Measured in production
 
-`greaseSerializeDate`, dropped into the One Learning Community indexing pipeline **on
-top of already-greased models** (≥5k-row models that index timestamps): median
+`greaseSerializeDate`, dropped into a production serialization pipeline **on top of
+already-greased models** (≥5k-row models with timestamp columns): median
 **−9.7%**, mean −13.8%, max −31.8% CPU per row. The shape matched the model exactly —
-the absolute time saved tracks date-column count, so thin date-heavy models
-(`MessageRecipient` −31.8%) gained most by percentage and heavy models
-(`Outline` −3.7%) least, even though the heavy ones saved the most absolute time per
-row. That's the honest shape: the date path is just as effective everywhere; its
+the absolute time saved tracks date-column count, so the thinnest date-heavy models
+gained most by percentage (up to −31.8%) and the heaviest least (−3.7%), even though the
+heavy ones saved the most absolute time per row. That's the honest shape: the date path is just as effective everywhere; its
 *percentage* is a function of how much other work the row does.
 
 ## Validate it yourself
