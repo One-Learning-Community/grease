@@ -49,6 +49,24 @@ class HasGreasedFromDateTimeParityTest extends TestCase
         }
     }
 
+    public function test_out_of_range_dates_defer_to_vanilla(): void
+    {
+        // The write-path twin of the serialize hole: an overflow / zero storage
+        // string must not take the identity fast path. Vanilla parses-and-reformats
+        // (Carbon overflow-normalizes), so returning it verbatim would corrupt the
+        // getDirty()/originalIsEquivalent() comparison on save().
+        $vanilla = new VanillaFDT;
+        $greased = new GreasedFDT;
+
+        foreach (['0000-00-00 00:00:00', '2026-02-30 12:00:00', '2026-13-45 99:99:99'] as $bad) {
+            $this->assertSame(
+                $vanilla->fromDateTime($bad),
+                $greased->fromDateTime($bad),
+                "fromDateTime($bad)",
+            );
+        }
+    }
+
     public function test_custom_dateformat_defers_to_vanilla(): void
     {
         // A non-standard driver format is not certified → must defer (and still match vanilla).
