@@ -45,7 +45,7 @@ trait HasGreasedSerialization
     use InteractsWithGreaseBlueprint;
 
     /** A plain second-precision storage timestamp — the only shape the fast path handles. */
-    private const GREASE_DATE_SHAPE = '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/';
+    private const GREASE_DATE_SHAPE = '/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/';
 
     /** Representative values used to certify a class's serialize strategy. */
     private const GREASE_DATE_PROBES = [
@@ -72,14 +72,24 @@ trait HasGreasedSerialization
      * ⇒ `attributesToArray()` (attribute keys are strings, so no `array_merge` reindexing). Any
      * loaded relation defers to `parent::toArray()` — the guard stays intact exactly where a
      * cycle is possible.
+     *
+     * One subtlety: an appended accessor can lazily load a relation *as a side effect* of
+     * `attributesToArray()` (a `kid_count` append that reads `$this->relations`). Vanilla runs
+     * `relationsToArray()` *after* `attributesToArray()`, so such a relation still appears — and a
+     * cycle becomes possible. So we compute attributes first and only skip the guard if `relations`
+     * is *still* empty afterwards; the moment anything got loaded we hand off to `parent::toArray()`.
      */
     public function toArray()
     {
-        if ($this->relations === []) {
-            return $this->attributesToArray();
+        if ($this->relations !== []) {
+            return parent::toArray();
         }
 
-        return parent::toArray();
+        $attributes = $this->attributesToArray();
+
+        return $this->relations === []
+            ? $attributes
+            : parent::toArray();
     }
 
     /**
@@ -108,7 +118,7 @@ trait HasGreasedSerialization
     {
         if (is_string($value)
             && $this->greaseFromDateTimePlan() === 'identity'
-            && preg_match(self::GREASE_DATE_SHAPE, $value) === 1) {
+            && $this->greaseIsStorageDate($value)) {
             return $value;
         }
 
@@ -116,9 +126,36 @@ trait HasGreasedSerialization
     }
 
     /**
+     * True only for a *real, in-range* second-precision storage timestamp — the
+     * shape every fast path here assumes. GREASE_DATE_SHAPE is purely syntactic, so
+     * on its own it waves through semantically invalid strings that Carbon
+     * overflow-normalizes instead of round-tripping: `0000-00-00 00:00:00` (a legacy
+     * / non-strict-mode MySQL column literal -> `-0001-11-30`), `2026-02-30`
+     * (-> `2026-03-02`), `2026-13-45 99:99:99`. Those must defer to the exact vanilla
+     * parse. `checkdate()` plus the time-range guard rejects every such value without
+     * paying for a Carbon parse.
+     */
+    private function greaseIsStorageDate(string $value): bool
+    {
+        if (preg_match(self::GREASE_DATE_SHAPE, $value, $m) !== 1) {
+            return false;
+        }
+
+        return checkdate((int) $m[2], (int) $m[3], (int) $m[1])
+            && (int) $m[4] <= 23
+            && (int) $m[5] <= 59
+            && (int) $m[6] <= 59;
+    }
+
+    /**
      * 'identity' when storage-format strings round-trip through `fromDateTime()` unchanged for
      * this class (standard driver format), else 'defer'. Keyed by timezone + connection, like
      * the serialize plan. A string (never null/false) so the `??=` memo is a true one-shot.
+     *
+     * Caveat: the plan reads `getDateFormat()` at build time but isn't keyed by it — a class-
+     * level `$dateFormat` (the normal case) is read correctly, but a *runtime* `setDateFormat()`
+     * on an already-certified instance won't re-certify. Per-instance runtime date-format changes
+     * are outside the cached case; see the Caveats page.
      */
     protected function greaseFromDateTimePlan(): string
     {
@@ -167,7 +204,7 @@ trait HasGreasedSerialization
             // Fast path only for a raw, second-precision storage string. A Carbon
             // instance, a date-only value, or sub-second precision falls through to
             // the byte-for-byte vanilla composition below.
-            if (is_string($value) && preg_match(self::GREASE_DATE_SHAPE, $value) === 1) {
+            if (is_string($value) && $this->greaseIsStorageDate($value)) {
                 $attributes[$key] = $plan === 'utc_iso'
                     ? strtr($value, ' ', 'T').'.000000Z'
                     : $value; // 'identity'
@@ -198,7 +235,7 @@ trait HasGreasedSerialization
 
             $value = $attributes[$key];
 
-            if (! is_string($value) || preg_match(self::GREASE_DATE_SHAPE, $value) !== 1) {
+            if (! is_string($value) || ! $this->greaseIsStorageDate($value)) {
                 continue;
             }
 
@@ -257,7 +294,7 @@ trait HasGreasedSerialization
 
         // Fast path only for a raw, second-precision storage string under a
         // certified class plan — mirroring addDateAttributesToArray exactly.
-        if (is_string($raw) && preg_match(self::GREASE_DATE_SHAPE, $raw) === 1) {
+        if (is_string($raw) && $this->greaseIsStorageDate($raw)) {
             $plan = $this->greaseDateSerializePlan();
 
             if ($plan !== false) {

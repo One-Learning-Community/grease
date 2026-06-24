@@ -57,6 +57,20 @@ class Dispatcher extends BaseDispatcher
     protected $hasListenersCache = [];
 
     /**
+     * Whether any listener is registered under an interface name. Interface
+     * listeners are the only listeners `dispatch()` can reach that `hasListeners()`
+     * does not see — vanilla's `getListeners()` appends them via
+     * `addInterfaceListeners()` for any `class_exists($event)`. When this is false —
+     * the overwhelmingly common case — the no-listener fast path skips the
+     * `class_implements()` reachability walk entirely and stays a pure cache hit.
+     * Set once at registration (a boot concern), never unset: a `forget()` that
+     * removes the last interface listener just leaves it true, which is safe (the
+     * per-dispatch check then correctly finds no match, only marginally slower) and
+     * keeps it off the hot path.
+     */
+    protected bool $greaseHasInterfaceListeners = false;
+
+    /**
      * Build a greased dispatcher that takes over from an existing one — copying its
      * full state (listeners, wildcards, resolvers, deferral) so it's a transparent
      * drop-in. Reads the base's protected state directly (legal: this is a subclass).
@@ -80,13 +94,36 @@ class Dispatcher extends BaseDispatcher
             $new->wildcardPatterns[$pattern] = new WildcardPattern($pattern);
         }
 
+        foreach (array_keys($new->listeners) as $name) {
+            if (interface_exists($name)) {
+                $new->greaseHasInterfaceListeners = true;
+                break;
+            }
+        }
+
         return $new;
     }
 
     /** {@inheritDoc} */
     public function listen($events, $listener = null)
     {
+        // Snapshot the listener keys so we can tell which names this call *registered*
+        // and flag any that are interfaces — the diff catches every shape parent::
+        // resolves to, including a typed-closure auto-listen whose event name is
+        // derived from the closure's parameter type rather than the $events argument.
+        // Skipped once the flag is set (an interface listener stays one for good).
+        $known = $this->greaseHasInterfaceListeners ? null : $this->listeners;
+
         parent::listen($events, $listener);
+
+        if ($known !== null) {
+            foreach (array_diff_key($this->listeners, $known) as $name => $listeners) {
+                if (interface_exists($name)) {
+                    $this->greaseHasInterfaceListeners = true;
+                    break;
+                }
+            }
+        }
 
         // Registration happens at boot, not on the hot path — a blanket reset keeps
         // the caches honest without replicating listen()'s version-specific internals.
@@ -111,12 +148,37 @@ class Dispatcher extends BaseDispatcher
         // condition, so this never changes observable behaviour.
         if (is_string($event)
             && ! $this->hasListeners($event)
+            && ! ($this->greaseHasInterfaceListeners && $this->hasInterfaceListeners($event))
             && ! $this->shouldDeferEvent($event)
             && ! $this->shouldBroadcast(Arr::wrap($payload))) {
             return $halt ? null : [];
         }
 
         return parent::dispatch($event, $payload, $halt);
+    }
+
+    /**
+     * Whether an existing-class string event would pick up a listener bound to one
+     * of its interfaces. `hasListeners()` only sees direct + wildcard listeners, but
+     * `getListeners()` additionally runs `addInterfaceListeners()` for any
+     * `class_exists($event)` — so without this guard the no-listener fast path would
+     * silently drop interface listeners on a string-dispatched class event. Mirrors
+     * vanilla's `addInterfaceListeners()` reachability exactly: interfaces only,
+     * direct listeners only.
+     */
+    protected function hasInterfaceListeners($eventName): bool
+    {
+        if (! class_exists($eventName, false)) {
+            return false;
+        }
+
+        foreach (class_implements($eventName) as $interface) {
+            if (isset($this->listeners[$interface])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** {@inheritDoc} */

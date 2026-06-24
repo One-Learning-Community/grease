@@ -79,7 +79,9 @@ trait HasGreasedHydration
      *
      * Caveat: a model that overrides newInstance() to inject construction-time
      * state during hydration should not use this tier (or should re-apply that
-     * state here).
+     * state here). Likewise a runtime setTable() on the prototype isn't carried onto
+     * hydrated rows (they take the class-default table) — class-level $table, the
+     * normal case, is applied by __construct. See the Caveats page.
      */
     public function newFromBuilder($attributes = [], $connection = null)
     {

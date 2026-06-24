@@ -2,7 +2,49 @@
 
 namespace Grease\Tests;
 
+use Grease\Concerns\HasGrease;
 use Grease\Concerns\HasGreasedSerialization;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * An appended accessor that lazy-loads a relation as a side effect of
+ * attributesToArray() — the canonical "a count/flag derived from a relationship"
+ * shape (e.g. `kid_count` reading `$this->kids`).
+ */
+trait LazyLoadsRelationOnAppend
+{
+    public function getKidCountAttribute(): int
+    {
+        if (! $this->relationLoaded('kids')) {
+            $this->setRelation('kids', collect([['id' => 7], ['id' => 8]]));
+        }
+
+        return $this->kids->count();
+    }
+}
+
+class VanillaAppendLoadsRelation extends Model
+{
+    use LazyLoadsRelationOnAppend;
+
+    public $timestamps = false;
+
+    protected $table = 'al';
+
+    protected $appends = ['kid_count'];
+}
+
+class GreasedAppendLoadsRelation extends Model
+{
+    use HasGrease;
+    use LazyLoadsRelationOnAppend;
+
+    public $timestamps = false;
+
+    protected $table = 'al';
+
+    protected $appends = ['kid_count'];
+}
 
 /**
  * {@see HasGreasedSerialization::toArray()} short-circuits the
@@ -64,6 +106,34 @@ class HasGreasedToArrayRecursionParityTest extends TestCase
         $this->assertSame(json_encode($vOut), json_encode($gOut));
         $this->assertArrayHasKey('self', $gOut);
         $this->assertArrayNotHasKey('self', $gOut['self'], 'nested self is attributes-only (guard broke the cycle)');
+    }
+
+    public function test_append_accessor_that_lazy_loads_a_relation_matches_vanilla(): void
+    {
+        // The short-circuit checks relations === [] BEFORE attributesToArray() runs
+        // the appended accessor — but that accessor lazy-loads a relation. Vanilla
+        // runs relationsToArray() AFTER attributesToArray(), so the relation appears;
+        // the fast path must not drop it.
+        $vanilla = (new VanillaAppendLoadsRelation)->newFromBuilder(['id' => 1]);
+        $greased = (new GreasedAppendLoadsRelation)->newFromBuilder(['id' => 1]);
+
+        $vOut = $vanilla->toArray();
+        $gOut = $greased->toArray();
+
+        $this->assertSame(json_encode($vOut), json_encode($gOut));
+        $this->assertArrayHasKey('kids', $gOut, 'relation loaded by the append accessor must be present');
+    }
+
+    public function test_append_loaded_relation_toarray_is_idempotent(): void
+    {
+        // A second toArray() must equal the first — the side-effecting accessor left
+        // the relation loaded, so the fast path must not flip the result between calls.
+        $vanilla = (new VanillaAppendLoadsRelation)->newFromBuilder(['id' => 1]);
+        $greased = (new GreasedAppendLoadsRelation)->newFromBuilder(['id' => 1]);
+
+        $greased->toArray();
+
+        $this->assertSame(json_encode($vanilla->toArray()), json_encode($greased->toArray()));
     }
 
     public function test_mutually_circular_relations_match_vanilla(): void

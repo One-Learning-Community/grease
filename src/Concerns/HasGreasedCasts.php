@@ -3,6 +3,7 @@
 namespace Grease\Concerns;
 
 use Grease\ClosureCast;
+use Illuminate\Contracts\Database\Eloquent\Castable;
 use Illuminate\Support\Collection as BaseCollection;
 
 /**
@@ -84,8 +85,10 @@ trait HasGreasedCasts
         // delegated to the framework's own getEnumCastableAttributeValue(), so
         // backed/pure/instanceof/null/invalid handling stays byte-identical — we
         // only skip the redundant parent:: re-walk (2nd getCastType, the encrypted
-        // probe, the 14-arm switch, and isEnumCastable).
-        if (static::$greaseEnumTypes[$castType] ??= enum_exists($castType)) {
+        // probe, the 14-arm switch, and isEnumCastable). An enum that *implements
+        // Castable* is excluded (vanilla's isEnumCastable() returns false for it), so
+        // it routes to its castUsing() cast via parent::, not the enum path.
+        if (static::$greaseEnumTypes[$castType] ??= (enum_exists($castType) && ! is_subclass_of($castType, Castable::class))) {
             return $this->getEnumCastableAttributeValue($key, $value);
         }
 

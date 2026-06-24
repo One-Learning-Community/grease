@@ -55,7 +55,13 @@ trait HasGreasedAttributes
 
     public function getDates()
     {
-        return static::$greaseBlueprint[static::class]['dates'] ??= parent::getDates();
+        // Keyed by usesTimestamps() — the one per-instance input to getDates(). A
+        // model with timestamps disabled ($model->timestamps = false /
+        // withoutTimestamps(), both normal Eloquent) returns [], and must not poison
+        // the cache for timestamps-on instances of the same class (which would drop
+        // created_at/updated_at from their serialization). The column names are
+        // class-level, so two slots cover every instance.
+        return static::$greaseBlueprint[static::class]['dates'][$this->usesTimestamps()] ??= parent::getDates();
     }
 
     public function hasGetMutator($key)
@@ -92,5 +98,33 @@ trait HasGreasedAttributes
         }
 
         return $result;
+    }
+
+    // getCasts() prepends [keyName => keyType] when incrementing, so these three
+    // per-instance properties feed its output. They're class-level in normal use
+    // (read once into the cache), but a *runtime* setter must drop this instance off
+    // the cached path — same divergence flag as mergeCasts(). The framework never
+    // calls these internally (hydration/relations don't touch them), so the warm path
+    // is unaffected; only explicit user calls diverge, and only the calling instance.
+
+    public function setKeyName($key)
+    {
+        $this->greaseCastsDiverged = true;
+
+        return parent::setKeyName($key);
+    }
+
+    public function setKeyType($type)
+    {
+        $this->greaseCastsDiverged = true;
+
+        return parent::setKeyType($type);
+    }
+
+    public function setIncrementing($value)
+    {
+        $this->greaseCastsDiverged = true;
+
+        return parent::setIncrementing($value);
     }
 }

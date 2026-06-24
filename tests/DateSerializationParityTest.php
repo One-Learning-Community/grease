@@ -431,6 +431,33 @@ class DateSerializationParityTest extends TestCase
         );
     }
 
+    public function test_out_of_range_timestamp_defers_and_matches_vanilla(): void
+    {
+        // Syntactically shaped but semantically invalid storage strings — a legacy
+        // MySQL zero-date, an overflow day, an all-out-of-range value. Carbon
+        // overflow-normalizes them (0000-00-00 -> -000001-11-30, 02-30 -> 03-02), so
+        // the syntactic fast path would diverge. Each must defer to vanilla.
+        date_default_timezone_set('UTC');
+
+        foreach (['0000-00-00 00:00:00', '2026-02-30 12:00:00', '2026-13-45 99:99:99'] as $bad) {
+            GreasedTs::flushGreaseBlueprint();
+            $this->assertIdentical(VanillaTs::class, GreasedTs::class, $this->tsRow(['created_at' => $bad]));
+        }
+    }
+
+    public function test_out_of_range_datetime_cast_defers_and_matches_vanilla(): void
+    {
+        // The addCastAttributesToArray twin: an overflow value in a plain datetime
+        // cast must also defer rather than take the syntactic rewrite.
+        date_default_timezone_set('UTC');
+        GreasedDtCast::flushGreaseBlueprint();
+
+        $this->assertIdentical(
+            VanillaDtCast::class, GreasedDtCast::class,
+            $this->dtCastRow(['event_at' => '0000-00-00 00:00:00', 'archived_at' => '2026-02-30 12:00:00'])
+        );
+    }
+
     public function test_date_only_value_defers_and_matches_vanilla(): void
     {
         date_default_timezone_set('UTC');

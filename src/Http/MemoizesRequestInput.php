@@ -17,9 +17,11 @@ use Illuminate\Support\Arr;
  * `getInputSource()` on every input read) re-scans the content-type each time too.
  *
  * The merged map is stable for the life of the request once middleware has run, so it's
- * memoized per-instance and invalidated in every Laravel-level mutator. `isJson()` is a
- * pure function of the (immutable) content-type header, so it's memoized for the life of
- * the instance.
+ * memoized per-instance and invalidated in every Laravel-level mutator. `isJson()` is NOT
+ * memoized — the content-type header can change after construction (content-negotiation
+ * middleware), and a memo there would freeze a stale answer; it just delegates to vanilla,
+ * which is a cheap header scan and, because the input base above is already memoized,
+ * runs at most once per input read regardless.
  *
  * Every observable mutation path is tracked. The value mutators (`merge`/`mergeIfMissing`/
  * `replace`/`offsetSet`/`offsetUnset`/`setJson`) flush the base arrays. The lifecycle
@@ -43,10 +45,11 @@ use Illuminate\Support\Arr;
  *   - `files` — feeds `all()` via `allFiles()`, but vanilla already caches that
  *     (`$convertedFiles`), so a post-read file mutation is stale in vanilla too — parity
  *     holds, no new caveat.
- *   - `server` / `headers` — affect the input source / content-type only through
- *     `setMethod()` and the content-type header, both handled (setMethod flushes;
- *     content-type is request-immutable). Direct rewriting of these bags mid-request is
- *     exotic and outside the supported surface.
+ *   - `server` / `headers` — `setMethod()` flushes the input base; `isJson()` reads the
+ *     content-type live (not memoized), so a header change is reflected. The one residue:
+ *     flipping the content-type *after* an input read, which would switch `input()`'s
+ *     source bag (JSON vs form), is in the same carve-out as direct bag mutation — exotic
+ *     and outside the supported surface.
  *
  * Why this can't be locked down (it was considered): the obvious guard — making the
  * `query`/`request` bag properties private here — is impossible *and* would miss the mark.
@@ -73,9 +76,6 @@ trait MemoizesRequestInput
 
     /** Memoized `array_replace_recursive(input(), allFiles())` — the base for `all()`. */
     protected ?array $greaseAllBase = null;
-
-    /** Memoized content-type classification (immutable per request). */
-    protected ?bool $greaseIsJson = null;
 
     /**
      * {@inheritDoc}
@@ -112,7 +112,10 @@ trait MemoizesRequestInput
      */
     public function isJson()
     {
-        return $this->greaseIsJson ??= parent::isJson();
+        // Read live, not memoized: the content-type header can change after
+        // construction (content-negotiation middleware), and the input-base memo
+        // already keeps this off the per-read hot path.
+        return parent::isJson();
     }
 
     /**
@@ -188,32 +191,28 @@ trait MemoizesRequestInput
     /**
      * {@inheritDoc}
      *
-     * Re-seeds every bag. Drop the full memo, content-type classification included.
+     * Re-seeds every bag. Drop the full input memo (isJson() is read live, so nothing to reset).
      */
     public function initialize(array $query = [], array $request = [], array $attributes = [], array $cookies = [], array $files = [], array $server = [], $content = null): void
     {
         parent::initialize($query, $request, $attributes, $cookies, $files, $server, $content);
 
         $this->flushGreaseInput();
-        $this->greaseIsJson = null;
     }
 
     /**
      * Clone clones every bag (and `duplicate()` is clone-then-swap-bags). The copied memo
-     * would describe the pre-clone bags, so drop it — and the `isJson` memo too, since a
-     * `duplicate()` can swap the server bag and change the content-type.
+     * would describe the pre-clone bags, so drop it.
      */
     public function __clone()
     {
         parent::__clone();
 
         $this->flushGreaseInput();
-        $this->greaseIsJson = null;
     }
 
     /**
-     * Drop the memoized input maps. Used by the value mutators, where the content-type
-     * (and thus `isJson`) is unchanged so it's left intact.
+     * Drop the memoized input maps. Used by the value mutators and lifecycle paths.
      */
     protected function flushGreaseInput(): void
     {

@@ -129,6 +129,33 @@ class ViewPropsParityTest extends TestCase
         }
     }
 
+    public function test_class_component_opening_is_vanilla_verbatim_plus_only_the_seed_line(): void
+    {
+        // Drift guard. compileClassComponentOpening() is a verbatim copy of the framework's
+        // static emit with one seed line inserted — the seed-presence test above wouldn't
+        // notice if vanilla CHANGED one of its own lines. This pins greased === vanilla's
+        // exact emit + the seed (immediately before startComponent), so a framework change to
+        // that emit — including a Laravel 12-vs-13 difference the local box may not run — fails
+        // red here instead of silently shipping a byte-divergence.
+        $args = ['App\\View\\Card', "'card'", "['type' => 'error']", 'abc123'];
+
+        $greased = Compiler::compileClassComponentOpening(...$args);
+        $vanilla = BladeCompiler::compileClassComponentOpening(...$args);
+
+        $seed = '<?php $component->attributes ??= new \\Grease\\View\\ComponentAttributeBag([]); ?>';
+
+        // Reconstruct the expected output: vanilla's lines, with the seed spliced in
+        // immediately before the final (startComponent) line.
+        $expected = explode("\n", $vanilla);
+        array_splice($expected, count($expected) - 1, 0, [$seed]);
+
+        $this->assertSame(
+            implode("\n", $expected),
+            $greased,
+            'class-component opening drifted from vanilla + seed — re-sync Compiler::compileClassComponentOpening() with the framework',
+        );
+    }
+
     public function test_compiled_path_matches_vanilla_and_is_memoized(): void
     {
         $cache = sys_get_temp_dir();

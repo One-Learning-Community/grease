@@ -9,6 +9,23 @@ The full cast contract is asserted **byte-identical to vanilla** in the test sui
 every cast type, every edge value, every null, every dirty comparison — across PHP
 8.2–8.5 and Laravel 12/13.
 
+## The guiding principle
+
+Eloquent gives you a hundred ways to configure a model, and vanilla pays — on every
+row — to keep all of them live at once. Grease optimizes the **95–99% case**: a model
+whose table, primary key, casts, and date format are declared as class properties, and
+an app that reads input and config through the framework's own APIs. For that case the
+output is byte-identical and the suite proves it.
+
+If you do **unusual runtime surgery** — reassigning a model's table or date format *per
+instance after it's already in use*, or writing directly to the Symfony input bags or
+the config array behind the framework's back — you've stepped outside the case Grease
+caches, and a tier may serve a value computed before your change. None of these are
+normal Eloquent; each has an idiomatic, class-level equivalent that Grease handles
+perfectly. **Rule of thumb: if you're doing something unusual with your models or the
+request, run your own tests with Grease enabled.** The narrowings below are the
+complete, honest list of where that matters.
+
 ## What stays exactly the same
 
 - **Custom casts** ([`CastsAttributes`](https://laravel.com/docs/eloquent-mutators#custom-casts)),
@@ -50,6 +67,25 @@ protected $casts = ['ssn' => 'encrypted:string'];
 ```
 
 This is an undocumented internal — there's no idiomatic reason to override it.
+
+### 3. Reassigning a model's table or date format at runtime
+
+The hydration and date tiers treat a model's **table** and **date format** as
+class-level — which they are in essentially every app (`protected $table`,
+`protected $dateFormat`). Two narrow edges fall out of that:
+
+- **`setTable()` on the model a query is built from** isn't carried onto the rows it
+  hydrates — they get the class-default table. (Setting `$table` as a class property,
+  or on a freshly-constructed model you then query, both work.)
+- **`setDateFormat()` called per instance** after the date fast-path has been certified
+  for the class can leave that instance using the previously-certified plan.
+
+Both are vanishingly rare — the standard `protected $dateFormat` / `protected $table`
+declarations are read correctly and cached once. Toggling **timestamps**
+(`$model->timestamps = false` / `withoutTimestamps()`), changing the **primary key**
+(`setKeyName()` / `setKeyType()` / `setIncrementing()`), and runtime
+`mergeCasts()` / `withCasts()` are all *normal* and fully handled — only the two
+runtime reassignments above step outside the cache.
 
 ## What defers to vanilla (correct, just unaccelerated)
 
