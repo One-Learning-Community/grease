@@ -19,7 +19,10 @@ namespace Grease\Concerns;
  *   - HasGreasedClassAttributes (class-attribute resolution: #[Table]/#[Fillable]/…)
  *   - HasGreasedInitializers    (per-class freeze of the guards/hides/timestamps/touches booters)
  *   - HasGreasedCasts           (narrowed flyweight cast dispatch — see its caveat)
+ *   - HasGreasedCastProbes      (per-key isEnum/isClass/isClassSerializable cast-probe memo)
  *   - HasGreasedSerialization   (date serialization round-trip elimination)
+ *   - HasGreasedPivots          (greased pivot model for many-to-many relations)
+ *   - HasGreasedQueries         (Eloquent builder __call dispatch-verdict memo)
  *
  * Every tier is a method override that falls back to `parent::`, so output stays
  * byte-identical to vanilla Eloquent. Non-greased models are untouched.
