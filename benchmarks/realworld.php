@@ -71,6 +71,22 @@ $schema->create('posts', function (Blueprint $t) {
     $t->timestamps();
 });
 
+$schema->create('tags', function (Blueprint $t) {
+    $t->increments('id');
+    $t->string('name');
+    $t->string('slug');
+});
+
+// The many-to-many join. An extra pivot column (`sort_order`) + pivot timestamps so the
+// hydrated pivot row exercises the cast/booter tiers AND date serialization — a bare
+// id-only pivot would under-sell the pivot tier (its Carbon round-trip never fires).
+$schema->create('post_tag', function (Blueprint $t) {
+    $t->integer('post_id');
+    $t->integer('tag_id');
+    $t->integer('sort_order');
+    $t->timestamps();
+});
+
 // --- Plain (vanilla) models. ---------------------------------------------------
 
 class User extends Model
@@ -95,6 +111,19 @@ class Post extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
+    public function tags()
+    {
+        return $this->belongsToMany(Tag::class, 'post_tag', 'post_id', 'tag_id')
+            ->withPivot('sort_order')->withTimestamps();
+    }
+}
+
+class Tag extends Model
+{
+    protected $table = 'tags';
+
+    public $timestamps = false;
 }
 
 // --- Greased models (same tables, + HasGrease, relations within the set). -------
@@ -117,6 +146,17 @@ class GreasedPost extends Post
     {
         return $this->belongsTo(GreasedUser::class, 'user_id');
     }
+
+    public function tags()
+    {
+        return $this->belongsToMany(GreasedTag::class, 'post_tag', 'post_id', 'tag_id')
+            ->withPivot('sort_order')->withTimestamps();
+    }
+}
+
+class GreasedTag extends Tag
+{
+    use HasGrease;
 }
 
 $MODELS = [
@@ -146,11 +186,30 @@ foreach (array_chunk($posts, 500) as $c) {
     $capsule->table('posts')->insert($c);
 }
 
+// 20 tags; each post gets 4 of them (deterministic spread) — so a 100-post eager load
+// hydrates ~400 pivot rows, the work the pivot tier targets.
+$tags = [];
+for ($g = 1; $g <= 20; $g++) {
+    $tags[] = ['name' => "Tag $g", 'slug' => "tag-$g"];
+}
+$capsule->table('tags')->insert($tags);
+$pivots = [];
+for ($p = 1; $p <= $pid; $p++) {
+    for ($k = 0; $k < 4; $k++) {
+        $tagId = (($p + $k * 5) % 20) + 1;
+        $pivots[] = ['post_id' => $p, 'tag_id' => $tagId, 'sort_order' => $k, 'created_at' => $now, 'updated_at' => $now];
+    }
+}
+foreach (array_chunk($pivots, 500) as $c) {
+    $capsule->table('post_tag')->insert($c);
+}
+
 // --- Workloads. ----------------------------------------------------------------
 
 $WORKLOADS = [
     'index_users' => fn (array $m) => $m['user']::query()->limit(100)->get()->toArray(),
     'posts_with_author' => fn (array $m) => $m['post']::with('user')->limit(100)->get()->toArray(),
+    'posts_with_tags' => fn (array $m) => $m['post']::with('tags')->limit(100)->get()->toArray(),
     'show_post' => fn (array $m) => optional($m['post']::with('user')->find(50))->toArray(),
     'bulk_update' => fn (array $m) => $m['user']::query()->limit(150)->get()->each(function ($u) {
         $u->score = $u->score + 1;
@@ -226,6 +285,7 @@ function percentile(array $xs, float $p): float
 $LABELS = [
     'index_users' => 'list 100 users → JSON',
     'posts_with_author' => '100 posts with author → JSON',
+    'posts_with_tags' => '100 posts with tags (m2m) → JSON',
     'show_post' => 'show one post (with author)',
     'bulk_update' => 'load 150, mutate, save',
 ];

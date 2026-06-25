@@ -14,7 +14,7 @@
  *
  *   php -d xdebug.mode=off -d opcache.jit=off -d memory_limit=1G benchmarks/realworld_excimer.php [endpoint] [secs]
  *
- * endpoint: one of index_users|posts_with_author|show_post|bulk_update, or "all" (default).
+ * endpoint: one of index_users|posts_with_author|posts_with_tags|show_post|bulk_update, or "all" (default).
  */
 
 require __DIR__.'/../vendor/autoload.php';
@@ -59,6 +59,17 @@ $schema->create('posts', function (Blueprint $t) {
     $t->text('meta');
     $t->timestamps();
 });
+$schema->create('tags', function (Blueprint $t) {
+    $t->increments('id');
+    $t->string('name');
+    $t->string('slug');
+});
+$schema->create('post_tag', function (Blueprint $t) {
+    $t->integer('post_id');
+    $t->integer('tag_id');
+    $t->integer('sort_order');
+    $t->timestamps();
+});
 
 class RwUser extends Model
 {
@@ -81,6 +92,18 @@ class RwPost extends Model
     {
         return $this->belongsTo(RwUser::class, 'user_id');
     }
+
+    public function tags()
+    {
+        return $this->belongsToMany(RwTag::class, 'post_tag', 'post_id', 'tag_id')
+            ->withPivot('sort_order')->withTimestamps();
+    }
+}
+class RwTag extends Model
+{
+    protected $table = 'tags';
+
+    public $timestamps = false;
 }
 class GreasedRwUser extends RwUser
 {
@@ -99,6 +122,16 @@ class GreasedRwPost extends RwPost
     {
         return $this->belongsTo(GreasedRwUser::class, 'user_id');
     }
+
+    public function tags()
+    {
+        return $this->belongsToMany(GreasedRwTag::class, 'post_tag', 'post_id', 'tag_id')
+            ->withPivot('sort_order')->withTimestamps();
+    }
+}
+class GreasedRwTag extends RwTag
+{
+    use HasGrease;
 }
 
 $now = '2026-01-01 00:00:00';
@@ -120,6 +153,20 @@ for ($u = 1; $u <= 300; $u++) {
 foreach (array_chunk($posts, 500) as $c) {
     $capsule->table('posts')->insert($c);
 }
+$tags = [];
+for ($g = 1; $g <= 20; $g++) {
+    $tags[] = ['name' => "Tag $g", 'slug' => "tag-$g"];
+}
+$capsule->table('tags')->insert($tags);
+$pivots = [];
+for ($p = 1; $p <= $pid; $p++) {
+    for ($k = 0; $k < 4; $k++) {
+        $pivots[] = ['post_id' => $p, 'tag_id' => (($p + $k * 5) % 20) + 1, 'sort_order' => $k, 'created_at' => $now, 'updated_at' => $now];
+    }
+}
+foreach (array_chunk($pivots, 500) as $c) {
+    $capsule->table('post_tag')->insert($c);
+}
 
 $M = ['user' => GreasedRwUser::class, 'post' => GreasedRwPost::class];
 
@@ -130,6 +177,7 @@ $conn = $capsule->getConnection();
 $WORKLOADS = [
     'index_users' => fn () => $M['user']::query()->limit(100)->get()->toArray(),
     'posts_with_author' => fn () => $M['post']::with('user')->limit(100)->get()->toArray(),
+    'posts_with_tags' => fn () => $M['post']::with('tags')->limit(100)->get()->toArray(),
     'show_post' => fn () => optional($M['post']::with('user')->find(50))->toArray(),
     'bulk_update' => function () use ($M, $conn) {
         $conn->beginTransaction();
