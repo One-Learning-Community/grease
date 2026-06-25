@@ -22,9 +22,14 @@ export default defineConfig({
       {
         property: 'og:description',
         content:
-          "Opt-in performance for Laravel's hot paths. One trait, byte-identical output — built from optimizations declined upstream.",
+          "Opt-in performance for Laravel's hot paths. One trait, byte-identical output — and it really shines under Octane.",
       },
     ],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:url', content: 'https://one-learning-community.github.io/grease/' }],
+    ['meta', { property: 'og:image', content: 'https://one-learning-community.github.io/grease/og-image.png' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:image', content: 'https://one-learning-community.github.io/grease/og-image.png' }],
   ],
 
   themeConfig: {

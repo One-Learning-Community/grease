@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Grease
   text: Get greased.
-  tagline: Opt-in performance across Laravel's hot paths — a menu of independent, byte-identical tiers spanning the whole request lifecycle, from Eloquent to the router, the view finder, and the query grammar. Take the ones whose hot paths you run. Built from optimizations declined upstream.
+  tagline: Opt-in performance across Laravel's hot paths — a menu of independent, byte-identical tiers spanning the whole request lifecycle, from Eloquent to the router, the view finder, and the query grammar. Take the ones whose hot paths you run.
   image:
     src: /logo.svg
     alt: Grease
