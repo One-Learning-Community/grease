@@ -77,4 +77,8 @@ this is the package every deploy at scale should be reaching for.
 If you're not there yet, you don't need it — and that's fine. Add it to the models
 that hurt, when they hurt.
 
+And if you run [Octane](/guide/octane), the case is stronger still: a persistent
+worker amortizes the framework boot that hides Grease under FPM, so the work it
+removes becomes a visible fraction of every request.
+
 [Get started →](/guide/getting-started)

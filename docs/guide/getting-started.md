@@ -64,7 +64,8 @@ the greased fast paths, and its output stays byte-identical to vanilla Eloquent.
 ::: tip There is nothing to configure
 No service provider to register (for the model tiers), no config file to publish, no
 cache to warm. The per-class "blueprint" builds itself lazily on first use and is
-Octane-safe. Add the trait, deploy, move on.
+Octane-safe. Add the trait, deploy, move on. (On a persistent worker the win is
+larger — see [Grease & Octane](/guide/octane).)
 :::
 
 ## Pick your tiers (optional)
