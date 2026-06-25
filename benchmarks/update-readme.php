@@ -30,6 +30,7 @@ if (! is_array($data) || ($data['parity'] ?? null) !== 'pass' || empty($data['ma
 $phrases = [
     'index_users' => 'list-100-users',
     'posts_with_author' => 'eager-load',
+    'posts_with_tags' => 'm2m eager-load',
     'show_post' => 'show',
     'bulk_update' => 'bulk write',
 ];
