@@ -14,3 +14,4 @@
 
 # Scratch profiler output (speedscope dumps, top-frame tables)
 /benchmarks/_profiles/
+/storage/

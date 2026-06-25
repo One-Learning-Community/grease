@@ -68,6 +68,7 @@ export default defineConfig({
           items: [
             { text: 'Why Grease', link: '/guide/why' },
             { text: 'Grease & Octane', link: '/guide/octane' },
+            { text: 'Grease & Livewire', link: '/guide/livewire' },
             { text: 'Getting Started', link: '/guide/getting-started' },
           ],
         },
