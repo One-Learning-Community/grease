@@ -108,6 +108,47 @@ class GreasedGrammarParityTest extends TestCase
         );
     }
 
+    #[DataProvider('drivers')]
+    public function test_wrap_table_shapes_are_byte_identical(string $greased, string $vanilla, string $grammar): void
+    {
+        $vanillaGrammar = self::connect($vanilla)->getQueryGrammar();
+        $greasedGrammar = self::connect($greased)->getQueryGrammar();
+
+        foreach (['posts', 'public.posts', 'posts as p', 'public.posts as p'] as $shape) {
+            $this->assertSame(
+                $vanillaGrammar->wrapTable($shape),
+                $greasedGrammar->wrapTable($shape),
+                "wrapTable('$shape') diverged (miss)",
+            );
+            // Second call exercises the memo hit.
+            $this->assertSame(
+                $vanillaGrammar->wrapTable($shape),
+                $greasedGrammar->wrapTable($shape),
+                "wrapTable('$shape') diverged (hit)",
+            );
+        }
+
+        // An Expression must bypass the memo and match vanilla.
+        $expr = new Expression('(select 1)');
+        $this->assertSame($vanillaGrammar->wrapTable($expr), $greasedGrammar->wrapTable($expr));
+
+        // An explicit non-null prefix bypasses the memo (its key domain isn't the connection prefix).
+        $this->assertSame(
+            $vanillaGrammar->wrapTable('posts', 'x_'),
+            $greasedGrammar->wrapTable('posts', 'x_'),
+        );
+    }
+
+    #[DataProvider('drivers')]
+    public function test_wrap_table_is_memoized(string $greased, string $vanilla, string $grammar): void
+    {
+        $greasedGrammar = self::connect($greased)->getQueryGrammar();
+        $greasedGrammar->wrapTable('posts');
+
+        $memo = new \ReflectionProperty($greasedGrammar, 'greaseWrapTableMemo');
+        $this->assertSame(['posts' => $greasedGrammar->wrapTable('posts')], $memo->getValue($greasedGrammar));
+    }
+
     /**
      * The one invariant: a dotted identifier's first segment is prefixed, so a prefix change must
      * flush the memo. After `setTablePrefix()` the greased wrap must match vanilla again.
@@ -118,13 +159,17 @@ class GreasedGrammarParityTest extends TestCase
         $greasedConn = self::connect($greased);
         $vanillaConn = self::connect($vanilla);
 
-        // Warm the memo at the empty prefix.
+        // Warm both memos (wrap + wrapTable) at the empty prefix.
         $this->assertSame(
             $vanillaConn->getQueryGrammar()->wrap('posts.id'),
             $greasedConn->getQueryGrammar()->wrap('posts.id'),
         );
+        $this->assertSame(
+            $vanillaConn->getQueryGrammar()->wrapTable('posts'),
+            $greasedConn->getQueryGrammar()->wrapTable('posts'),
+        );
 
-        // Change the prefix on both — the greased connection flushes its grammar memo.
+        // Change the prefix on both — the greased connection flushes its grammar memos.
         $greasedConn->setTablePrefix('pfx_');
         $vanillaConn->setTablePrefix('pfx_');
 
@@ -133,7 +178,15 @@ class GreasedGrammarParityTest extends TestCase
         $this->assertSame(
             $expected,
             $greasedConn->getQueryGrammar()->wrap('posts.id'),
-            'after prefix change the greased memo must be flushed and match vanilla',
+            'after prefix change the greased wrap memo must be flushed and match vanilla',
+        );
+
+        $expectedTable = $vanillaConn->getQueryGrammar()->wrapTable('posts');
+        $this->assertStringContainsString('pfx_posts', $expectedTable, 'sanity: prefix should appear on table');
+        $this->assertSame(
+            $expectedTable,
+            $greasedConn->getQueryGrammar()->wrapTable('posts'),
+            'after prefix change the greased wrapTable memo must be flushed and match vanilla',
         );
     }
 }

@@ -26,6 +26,9 @@ trait MemoizesWrappedIdentifiers
     /** @var array<string, string> */
     protected array $greaseWrapMemo = [];
 
+    /** @var array<string, string> */
+    protected array $greaseWrapTableMemo = [];
+
     /**
      * Wrap a value in keyword identifiers — memoized for string inputs.
      *
@@ -42,11 +45,37 @@ trait MemoizesWrappedIdentifiers
     }
 
     /**
-     * Flush the wrap memo — called when the table prefix changes (the only input that can alter
-     * a wrapped identifier).
+     * Wrap a table in keyword identifiers — memoized for string tables under the default prefix.
+     *
+     * `wrapTable()` is a distinct pure transform from `wrap()` (its own alias/schema/prefix walk),
+     * run for `from`, every join, and every insert/update/delete, on every query. Like `wrap()` its
+     * output is a pure function of (the table string, the connection's table prefix) — the SAME key
+     * domain and the SAME invalidation trigger — so it shares the prefix flush below.
+     *
+     * Only the default-prefix string case is memoized: an `Expression` has no stable key, and an
+     * explicit non-null `$prefix` argument is outside the connection-prefix key domain (rare, and
+     * would need a compound key) — both defer to vanilla.
+     *
+     * @param  Expression|string  $table
+     * @param  string|null  $prefix
+     * @return string
+     */
+    public function wrapTable($table, $prefix = null)
+    {
+        if ($prefix !== null || ! is_string($table)) {
+            return parent::wrapTable($table, $prefix);
+        }
+
+        return $this->greaseWrapTableMemo[$table] ??= parent::wrapTable($table);
+    }
+
+    /**
+     * Flush the wrap memos — called when the table prefix changes (the only input that can alter
+     * a wrapped identifier or table).
      */
     public function flushGreaseWrapMemo(): void
     {
         $this->greaseWrapMemo = [];
+        $this->greaseWrapTableMemo = [];
     }
 }
