@@ -6,6 +6,24 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-25
+
+### Added
+
+- **`php artisan optimize` integration for the cache tiers.** The opt-in cache providers (config,
+  view, router) now register their commands into Laravel's native `optimize` / `optimize:clear` via
+  `ServiceProvider::optimizes()`, under the framework's own `config` / `views` / `routes` keys — so
+  the greased superset *shadows* the native task in that slot rather than appending a second one. A
+  standard `php artisan optimize` deploy now writes the grease artifacts (and `optimize:clear`
+  removes them) for whichever cache tiers an app opted into — single pass, no double-caching, no
+  grease-specific step. `optimize --except=config` still skips the slot; an app that registers none
+  of the cache providers sees stock `optimize` behaviour.
+- **Clear twins — `grease:config-clear`, `grease:view-clear`, `grease:route-clear`** — registered
+  alongside the existing cache commands. Each is a superset of its native clear (`config:clear` /
+  `view:clear` / `route:clear`) that also unlinks the greased sibling index, mirroring the cache
+  commands that already superset `config:cache` etc. Idempotent when no index is present. Running one
+  (directly or via `optimize:clear`) therefore also drops the corresponding framework cache.
+
 ## [0.6.0] - 2026-06-25
 
 ### Added
@@ -427,7 +445,8 @@ dirty-check.
 - PHP 8.2+
 - Laravel 12 / 13
 
-[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/One-Learning-Community/grease/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/One-Learning-Community/grease/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/One-Learning-Community/grease/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/One-Learning-Community/grease/compare/v0.4.1...v0.5.0
