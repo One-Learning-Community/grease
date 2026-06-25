@@ -1,6 +1,6 @@
 # How It Works
 
-## One pattern, seven tiers
+## One pattern, eight tiers
 
 Every Grease tier is the same shape: a **method override that reads a single
 per-class "blueprint" and falls back to `parent::`** for anything it doesn't
@@ -33,7 +33,7 @@ invalidates as a unit. Two things make this fast *and* safe:
 Non-greased models run pure vanilla Eloquent. Grease adds **zero** cost to anything
 that doesn't use it.
 
-## The seven model tiers
+## The eight model tiers
 
 | Tier | What it computes once instead of every time |
 | --- | --- |
@@ -44,12 +44,22 @@ that doesn't use it.
 | **`HasGreasedCasts`** | Replaces the per-access cast `switch` with a flyweight resolved once per cast type, plus a fast path that delegates enum conversion to the framework. |
 | **`HasGreasedCastProbes`** | Memoizes the per-key cast-classification probes (`isEnumCastable` / `isClassCastable` / `isClassSerializable`) that `addCastAttributesToArray` reruns on every row during `toArray()`. The verdict is a pure function of the cast type, like `getCastType` — yet recomputed per row (and `isClassSerializable` re-calls the other two). Vanilla calls them through `$this->`, so the memo lands even inside the delegated `parent::` loop. **−10.2% on a rich-cast `get()->toArray()`** (the `index_users`/`posts_with_author` shape). |
 | **`HasGreasedSerialization`** | Eliminates the Carbon parse-and-reformat round-trip for date serialization — when a per-class probe certifies the output is a byte-identical rewrite — on both the read path (`addDateAttributesToArray` / `addCastAttributesToArray`, inside `toArray()`) and the write path (`fromDateTime`, the identity round-trip `getDirty()`/`originalIsEquivalent()` pays on every `save()`: **−38% on a `save()`-heavy dirty-check**). Also short-circuits the `toArray()` circular-recursion guard (a `debug_backtrace` + `Onceable` hash vanilla runs on *every* call) when no relations are loaded — there's nothing to recurse into, so `toArray()` is exactly `attributesToArray()`. **−27% on a relation-less `get()->toArray()`.** |
+| **`HasGreasedPivots`** | Greases the many-to-many **pivot** — a "dynamic model" Eloquent hydrates per related row that otherwise carries none of the tiers above, so every pivot row pays the full per-row booter / `resolveClassAttribute` / timestamp round-trip in vanilla. The related model's `newPivot()` returns a greased pivot (a `Pivot` with `HasGrease`) for the default case; a `using()` custom pivot or a `morphToMany` pivot defers to vanilla, byte-identical. **−75% on a pivot-heavy `belongsToMany()->get()`.** |
 
-`HasGrease` is the umbrella that pulls in all seven; `GreasedModel` is the same as an
+`HasGrease` is the umbrella that pulls in all eight; `GreasedModel` is the same as an
 `extends`-able base class. (`HasGreasedClassAttributes` keeps its cache in a carve-out
 static rather than the blueprint — class-level PHP attributes are immutable for a process's
 lifetime, so it never needs invalidation, the same reasoning as the `getDateFormat`
 connection cache.)
+
+One model-axis tier is **deliberately not bundled**: **`HasGreasedQueries`** memoizes the
+Eloquent builder's `__call` dispatch verdict — the scope/passthru/forward decision re-resolved
+on every forwarded query verb (`orderBy` / `whereIn` / `select` / …). It's byte-identical and
+audited, but it swaps a custom builder in for *every* query on the model app-wide for a gain
+that's sub-0.1% of a real request (the dominant `where` / `orWhere` verbs are defined on the
+builder and bypass `__call` entirely). That reach isn't worth a default — add
+`use HasGreasedQueries;` explicitly on a query-construction-heavy model if you're chasing every
+last cycle.
 
 ## Two techniques worth understanding
 
