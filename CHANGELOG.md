@@ -6,6 +6,8 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-25
+
 ### Added
 
 - **Greased many-to-many pivot** (`Grease\Eloquent\Pivot` + `HasGreasedPivots`, folded into
@@ -33,6 +35,11 @@ All notable changes to `grease` are documented here. The format is based on
 - **`wrapTable()` identifier quoting memoized** alongside the shipped `wrap()` memo (same key domain
   — table + connection prefix — and the same prefix-flush invalidation). Byte-identical; a sub-µs
   per-query rider that compounds under Octane.
+
+### Changed
+
+- The published package is trimmed to `LICENSE`, `composer.json`, and `src/` — a smaller install,
+  with the dev/test/benchmark/docs payload excluded from the dist archive.
 
 ## [0.5.1] - 2026-06-24
 
@@ -420,7 +427,8 @@ dirty-check.
 - PHP 8.2+
 - Laravel 12 / 13
 
-[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/One-Learning-Community/grease/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/One-Learning-Community/grease/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/One-Learning-Community/grease/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/One-Learning-Community/grease/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/One-Learning-Community/grease/compare/v0.4.0...v0.4.1
