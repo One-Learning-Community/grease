@@ -1,9 +1,10 @@
 # Grease — Query Builder & Relations research leads
 
-**Date:** 2026-06-24 · **Method:** three parallel agents grounded in the live framework source
-(`/Users/serpentblade/work/framework`, Laravel 12/13, PHP 8.2+), Grease spine — measure-first,
-byte-/behaviour-identical, opt-in, honest-verdict. All µs are macOS ratios needing Linux/docker
-confirmation (per NOTES, macOS distorts magnitude).
+**Date:** 2026-06-24 (Linux-confirmed 2026-06-25) · **Method:** three parallel agents grounded in
+the live framework source (`/Users/serpentblade/work/framework`, Laravel 12/13, PHP 8.2+), Grease
+spine — measure-first, byte-/behaviour-identical, opt-in, honest-verdict. Magnitudes below are
+**Linux-confirmed on the NAS** (`benchmarks/docker/Dockerfile.nas`, php:8.4-cli + opcache + tracing
+JIT), not macOS ratios.
 
 **Prompt:** "Query builder already pored over? Relations?" Swept three surfaces that the prior
 Eloquent and foundation digs had not: the base Query Builder + SQL grammar, the Eloquent query
@@ -28,8 +29,8 @@ exact per-row taxes the model tiers remove (the `initialize*` booters, `resolveC
 #1 eager frame — and the timestamp Carbon round-trip on `withTimestamps()`). `Grease\Eloquent\Pivot`
 (a `Pivot` + `HasGrease`) + `HasGreasedPivots` (overrides the related model's `newPivot()`), folded
 into `HasGrease`. Carve-outs (byte-identical defers): `using(CustomPivot)` and `MorphToMany` (builds
-MorphPivot on the relation, bypassing the model seam). **A/B `pivot_ab.php`: −69% on 1,000 pivot
-rows** (macOS ratio). The one model class Grease structurally couldn't reach until now — the real
+MorphPivot on the relation, bypassing the model seam). **A/B `pivot_ab.php`: −75.7% on 1,000 pivot
+rows (Linux/NAS; −69% macOS).** The one model class Grease structurally couldn't reach until now — the real
 winner of this sweep. The ICP shape (roles/permissions/tags m2m) on an API.
 
 ### RIDER — `wrapTable()` memo (`perf(grammar)`, commit 185e502)
@@ -46,8 +47,9 @@ invalidated. Macros re-probed live (can't be shadowed). Seam: `HasGreasedQueries
 `Grease\Database\Eloquent\Builder`, only the default builder greased (custom builder attribute /
 `static::$builder` honoured). **Honest scope correction:** `where`/`orWhere`/`latest`/`oldest`/`whereNot`
 are DEFINED on Eloquent\Builder and bypass `__call`, so the memo helps the *other* forwarded verbs
-(orderBy/whereIn/select/limit/groupBy/having/…), not `where()`. A/B `builder_call_ab.php`: −9.8% on a
-7-forwarded-verb chain (pure dispatch); low single digits once SQL + hydration dominate.
+(orderBy/whereIn/select/limit/groupBy/having/…), not `where()`. A/B `builder_call_ab.php`: −7.4%
+Linux/NAS (−9.8% macOS) on a 7-forwarded-verb chain (pure dispatch); low single digits once SQL +
+hydration dominate.
 
 ---
 
@@ -86,5 +88,9 @@ are DEFINED on Eloquent\Builder and bypass `__call`, so the memo helps the *othe
 The query/builder layers are **thin-after-wrap** (the structural prediction held); the sweep's real
 prize was the **pivot**, a clean reuse of the proven model tiers on a class Grease couldn't previously
 touch. Two cheap byte-identical riders (`wrapTable`, `__call` memo) shipped alongside. Everything else is
-in the negatives ledger. Next: confirm the three deltas on `benchmarks/docker` (Linux) before trusting
-the magnitudes.
+in the negatives ledger.
+
+**Linux-confirmed (NAS, 2026-06-25):** pivot −75.7% (1k rows), `__call` −7.4% (pure dispatch), full
+parity suite 583/583 green on Linux. `wrapTable` has no standalone A/B (sub-µs free rider on the
+shipped grammar memo). Numbers trustworthy; remaining follow-up is release hygiene (CHANGELOG/README/
+phpbench) + merge.

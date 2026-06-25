@@ -96,5 +96,5 @@ printf("\n=== builder __call A/B (7 forwarded verbs/chain, %d iters) ===\n\n", $
 printf("parity: IDENTICAL SQL, greased builder = %s\n\n", get_class($g->newQuery()));
 printf("vanilla builder : %8.4f µs/chain\n", $vanilla);
 printf("greased builder : %8.4f µs/chain\n", $greased);
-printf("delta           : %+7.1f%%  (macOS ratio — confirm on benchmarks/docker)\n\n",
+printf("delta           : %+7.1f%%  (run on benchmarks/docker for trustworthy magnitudes)\n\n",
     ($greased - $vanilla) / $vanilla * 100);

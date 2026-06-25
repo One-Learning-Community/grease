@@ -147,5 +147,5 @@ printf("\n=== pivot A/B (%d users × %d roles = %d pivot rows/pass, %d iters) ==
 printf("parity: IDENTICAL (toArray + rawOriginal), greased pivot = %s\n\n", get_class($gPivot));
 printf("vanilla pivot  : %10.1f µs/pass\n", $vanilla);
 printf("greased pivot  : %10.1f µs/pass\n", $greased);
-printf("delta          : %+9.1f%%  (macOS ratio — confirm on benchmarks/docker)\n\n",
+printf("delta          : %+9.1f%%  (run on benchmarks/docker for trustworthy magnitudes)\n\n",
     ($greased - $vanilla) / $vanilla * 100);
