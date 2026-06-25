@@ -33,5 +33,6 @@ trait HasGrease
     use HasGreasedHydration;
     use HasGreasedInitializers;
     use HasGreasedPivots;
+    use HasGreasedQueries;
     use HasGreasedSerialization;
 }
