@@ -18,8 +18,15 @@ use Illuminate\Database\Grammar;
  *
  * The ONE invalidation trigger is the **table prefix**: a dotted column's first segment is wrapped
  * as a table and receives the prefix, so the cached value embeds it. The greased connection flushes
- * this memo on `setTablePrefix()` (see {@see FlushesWrapMemoOnPrefixChange}); nothing else feeds
- * `wrap()`, so nothing else can invalidate it. Output stays byte-identical to vanilla.
+ * this memo on `setTablePrefix()` (see {@see FlushesWrapMemoOnPrefixChange}); the prefix is set
+ * before the grammar is built and read live at wrap time, so `setTablePrefix` is the sole staleness
+ * trigger — and `withoutTablePrefix()` / the deprecated `Grammar::setTablePrefix()` both round-trip
+ * through it. Nothing else feeds `wrap()`/`wrapTable()`, so nothing else can invalidate them. Output
+ * stays byte-identical to vanilla.
+ *
+ * Out of scope (exotic runtime surgery, the "95% scope" line): moving an already-warm grammar onto a
+ * different connection via `Connection::setQueryGrammar()` would not re-flush — but the grammar still
+ * holds a ref to its original connection, so vanilla behaves oddly there too. Not a supported path.
  */
 trait MemoizesWrappedIdentifiers
 {

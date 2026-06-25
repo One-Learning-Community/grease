@@ -7,6 +7,7 @@ use Grease\Concerns\HasGrease;
 use Grease\Concerns\HasGreasedQueries;
 use Grease\Database\Eloquent\Builder;
 use Grease\Tests\TestCase;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Builder as BaseBuilder;
 use Illuminate\Database\Eloquent\Model;
@@ -57,6 +58,91 @@ class GreasedQbWithCustomBuilder extends Model
     protected $table = 'qb_rows';
 
     protected $guarded = [];
+}
+
+/** A model whose scope name collides with a passthru ('count') and a #[Scope]-attribute scope. */
+trait QbCollidingScopes
+{
+    public function scopeCount($query)
+    {
+        return $query->where('active', 1);
+    }
+
+    #[Scope]
+    protected function highScore($query)
+    {
+        return $query->where('score', '>', 15);
+    }
+}
+
+class VanillaScopeShadow extends Model
+{
+    use QbCollidingScopes;
+
+    public $timestamps = false;
+
+    protected $table = 'qb_rows';
+
+    protected $guarded = [];
+}
+
+class GreasedScopeShadow extends Model
+{
+    use HasGrease;
+    use QbCollidingScopes;
+
+    public $timestamps = false;
+
+    protected $table = 'qb_rows';
+
+    protected $guarded = [];
+}
+
+// STI pairs — parent + child with a child-only scope; the verdict memo is keyed per concrete class.
+class VanillaStiParent extends Model
+{
+    public $timestamps = false;
+
+    protected $table = 'qb_rows';
+
+    protected $guarded = [];
+
+    public function scopeParentScope($query)
+    {
+        return $query->where('active', 1);
+    }
+}
+
+class VanillaStiChild extends VanillaStiParent
+{
+    public function scopeChildOnly($query)
+    {
+        return $query->where('score', '>', 5);
+    }
+}
+
+class GreasedStiParent extends Model
+{
+    use HasGrease;
+
+    public $timestamps = false;
+
+    protected $table = 'qb_rows';
+
+    protected $guarded = [];
+
+    public function scopeParentScope($query)
+    {
+        return $query->where('active', 1);
+    }
+}
+
+class GreasedStiChild extends GreasedStiParent
+{
+    public function scopeChildOnly($query)
+    {
+        return $query->where('score', '>', 5);
+    }
 }
 
 /**
@@ -178,5 +264,66 @@ class GreasedEloquentBuilderParityTest extends TestCase
         };
 
         $this->assertSame('Grease\Database\Eloquent\Builder', get_class($model->newQuery()));
+    }
+
+    // ── Adversarial-audit regression guards (verified clean 2026-06-25) ──────────────────
+
+    public function test_named_scope_shadows_a_passthru_name_like_vanilla(): void
+    {
+        // scopeCount collides with the `count` passthru. Vanilla checks scope BEFORE passthru,
+        // so ->count() applies the scope and returns a builder, NOT an aggregate int — the memo
+        // must preserve that precedence.
+        $vanilla = VanillaScopeShadow::count();
+        $greased = GreasedScopeShadow::count();
+
+        $this->assertInstanceOf(BaseBuilder::class, $greased, 'scope must win over the count passthru');
+        $this->assertSame($vanilla->toSql(), $greased->toSql());
+        $this->assertStringContainsString('active', $greased->toSql(), 'sanity: the scope, not an aggregate');
+    }
+
+    public function test_scope_attribute_method_resolves_like_vanilla(): void
+    {
+        $this->assertSame(
+            VanillaScopeShadow::highScore()->orderBy('id')->pluck('name')->all(),
+            GreasedScopeShadow::highScore()->orderBy('id')->pluck('name')->all(),
+        );
+    }
+
+    public function test_sti_scope_verdict_does_not_leak_between_parent_and_child(): void
+    {
+        // The child's child-only scope resolves identically to vanilla…
+        $this->assertSame(
+            VanillaStiChild::childOnly()->orderBy('id')->pluck('name')->all(),
+            GreasedStiChild::childOnly()->orderBy('id')->pluck('name')->all(),
+        );
+
+        // …and the parent — same method name, different concrete class — must NOT inherit the
+        // child-keyed verdict: it has no childOnly scope, so it forwards and throws, on both arms.
+        $vanillaThrew = false;
+        try {
+            VanillaStiParent::query()->childOnly();
+        } catch (BadMethodCallException) {
+            $vanillaThrew = true;
+        }
+
+        $greasedThrew = false;
+        try {
+            GreasedStiParent::query()->childOnly();
+        } catch (BadMethodCallException) {
+            $greasedThrew = true;
+        }
+
+        $this->assertTrue($vanillaThrew, 'sanity: vanilla parent has no childOnly');
+        $this->assertSame($vanillaThrew, $greasedThrew, 'parent must not see the child-keyed verdict');
+    }
+
+    public function test_local_macro_is_not_shadowed_by_a_memoized_verdict(): void
+    {
+        $q = GreasedScopeShadow::query();
+        $q->sum('score'); // memoize the 'sum' verdict as passthru in the static map first
+
+        // A local macro registered AFTER must still win — macros are re-probed live before the memo.
+        $q->macro('sum', fn ($self) => 'macroed');
+        $this->assertSame('macroed', $q->sum(), 'local macro must shadow the memoized passthru verdict');
     }
 }

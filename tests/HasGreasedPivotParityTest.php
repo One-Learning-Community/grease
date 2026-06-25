@@ -6,8 +6,10 @@ use Grease\Concerns\HasGrease;
 use Grease\Concerns\HasGreasedPivots;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Concerns\InteractsWithPivotTable;
+use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -141,6 +143,59 @@ class GreasedPivotTeam extends Model
     protected $guarded = [];
 }
 
+// ── Morph pair: morphToMany builds a MorphPivot on the RELATION, bypassing the model seam ──
+class VanillaPivotPost extends Model
+{
+    public $timestamps = false;
+
+    protected $table = 'pp_posts';
+
+    protected $guarded = [];
+
+    public function tags()
+    {
+        return $this->morphToMany(VanillaPivotMorphTag::class, 'taggable', 'pp_taggables', 'taggable_id', 'tag_id')
+            ->withPivot('note')->withTimestamps();
+    }
+}
+
+class GreasedPivotPost extends Model
+{
+    use HasGrease;
+
+    public $timestamps = false;
+
+    protected $table = 'pp_posts';
+
+    protected $guarded = [];
+
+    public function tags()
+    {
+        return $this->morphToMany(GreasedPivotMorphTag::class, 'taggable', 'pp_taggables', 'taggable_id', 'tag_id')
+            ->withPivot('note')->withTimestamps();
+    }
+}
+
+class VanillaPivotMorphTag extends Model
+{
+    public $timestamps = false;
+
+    protected $table = 'pp_mtags';
+
+    protected $guarded = [];
+}
+
+class GreasedPivotMorphTag extends Model
+{
+    use HasGrease;
+
+    public $timestamps = false;
+
+    protected $table = 'pp_mtags';
+
+    protected $guarded = [];
+}
+
 /**
  * The pivot of a many-to-many is a "dynamic model" the framework builds internally
  * ({@see InteractsWithPivotTable::newPivot}),
@@ -189,8 +244,33 @@ class HasGreasedPivotParityTest extends TestCase
             $b->integer('rank')->nullable();
         });
 
-        foreach (['pp_users', 'pp_roles', 'pp_tags', 'pp_teams'] as $t) {
+        foreach (['pp_posts', 'pp_mtags'] as $t) {
+            Schema::dropIfExists($t);
+            Schema::create($t, function (Blueprint $b) {
+                $b->increments('id');
+                $b->string('name')->nullable();
+            });
+        }
+
+        Schema::dropIfExists('pp_taggables');
+        Schema::create('pp_taggables', function (Blueprint $b) {
+            $b->integer('tag_id');
+            $b->integer('taggable_id');
+            $b->string('taggable_type');
+            $b->string('note')->nullable();
+            $b->timestamps();
+        });
+
+        foreach (['pp_users', 'pp_roles', 'pp_tags', 'pp_teams', 'pp_posts', 'pp_mtags'] as $t) {
             DB::table($t)->insert([['id' => 1, 'name' => 'a'], ['id' => 2, 'name' => 'b']]);
+        }
+
+        // Morph pivots for both post classes (the stored morph type is the concrete post class).
+        foreach ([VanillaPivotPost::class, GreasedPivotPost::class] as $type) {
+            DB::table('pp_taggables')->insert([
+                ['tag_id' => 1, 'taggable_id' => 1, 'taggable_type' => $type, 'note' => 'n1', 'created_at' => '2026-03-04 05:06:07', 'updated_at' => '2026-03-04 05:06:07'],
+                ['tag_id' => 2, 'taggable_id' => 1, 'taggable_type' => $type, 'note' => 'n2', 'created_at' => '2026-04-05 06:07:08', 'updated_at' => '2026-04-05 06:07:08'],
+            ]);
         }
 
         // Fixed timestamps so the pivot's Carbon serialize round-trip is deterministic.
@@ -275,5 +355,66 @@ class HasGreasedPivotParityTest extends TestCase
         $this->assertSame(get_class($vPivot), get_class($gPivot));
         $this->assertPivotParity($vPivot, $gPivot, 'custom using pivot');
         $this->assertSame(7, $gPivot->rank);
+    }
+
+    // ── Adversarial-audit regression guards (verified clean 2026-06-25) ──────────────────
+
+    public function test_morph_to_many_pivot_stays_vanilla_morph_pivot(): void
+    {
+        // MorphToMany overrides newPivot() on the RELATION (builds MorphPivot directly), bypassing
+        // the model's newPivot seam — so morph pivots are NOT greased. Correct, just unaccelerated,
+        // and must be byte-identical to vanilla's MorphPivot.
+        $vPost = VanillaPivotPost::with('tags')->find(1);
+        $gPost = GreasedPivotPost::with('tags')->find(1);
+
+        $vPivot = $vPost->tags->sortBy('id')->first()->pivot;
+        $gPivot = $gPost->tags->sortBy('id')->first()->pivot;
+
+        $this->assertSame(MorphPivot::class, get_class($gPivot), 'morph pivot must stay vanilla MorphPivot');
+        $this->assertNotSame('Grease\Eloquent\Pivot', get_class($gPivot), 'the model seam must NOT intercept morph');
+
+        // taggable_type is the concrete post class, which legitimately differs between the two
+        // fixture classes — normalize it; every other field must be byte-identical.
+        $strip = function (array $a): array {
+            unset($a['taggable_type']);
+
+            return $a;
+        };
+        $this->assertSame($strip($vPivot->toArray()), $strip($gPivot->toArray()));
+        $this->assertSame($strip($vPivot->getRawOriginal()), $strip($gPivot->getRawOriginal()));
+        $this->assertSame(VanillaPivotPost::class, $vPivot->taggable_type);
+        $this->assertSame(GreasedPivotPost::class, $gPivot->taggable_type);
+    }
+
+    public function test_pivot_write_path_is_byte_identical(): void
+    {
+        // The greased pivot's WRITE path (its timestamp serialization on attach/update) must store
+        // exactly what vanilla stores. Freeze time so now()-derived timestamps are deterministic.
+        Carbon::setTestNow('2026-07-08 09:10:11');
+
+        try {
+            DB::table('pp_role_user')->where('user_id', 2)->delete();
+            VanillaPivotUser::query()->find(2)->roles()->attach(1, ['level' => 4]);
+            $vAttach = (array) DB::table('pp_role_user')->where('user_id', 2)->where('role_id', 1)->first();
+
+            DB::table('pp_role_user')->where('user_id', 2)->delete();
+            GreasedPivotUser::query()->find(2)->roles()->attach(1, ['level' => 4]);
+            $gAttach = (array) DB::table('pp_role_user')->where('user_id', 2)->where('role_id', 1)->first();
+
+            $this->assertSame($vAttach, $gAttach, 'attach() must write an identical pivot row (incl. timestamps)');
+
+            // And updateExistingPivot — the touched updated_at must match vanilla byte-for-byte.
+            Carbon::setTestNow('2026-08-09 10:11:12');
+
+            VanillaPivotUser::query()->find(2)->roles()->updateExistingPivot(1, ['level' => 8]);
+            $vUpd = (array) DB::table('pp_role_user')->where('user_id', 2)->where('role_id', 1)->first();
+
+            GreasedPivotUser::query()->find(2)->roles()->updateExistingPivot(1, ['level' => 8]);
+            $gUpd = (array) DB::table('pp_role_user')->where('user_id', 2)->where('role_id', 1)->first();
+
+            $this->assertSame($vUpd, $gUpd, 'updateExistingPivot() must write an identical row');
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }
