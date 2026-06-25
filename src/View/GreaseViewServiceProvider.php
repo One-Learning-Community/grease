@@ -66,7 +66,11 @@ class GreaseViewServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([ViewCacheCommand::class]);
+            $this->commands([ViewCacheCommand::class, ViewClearCommand::class]);
+
+            // Shadow the native `views` slot in `optimize` / `optimize:clear` with the greased
+            // supersets, so a standard deploy picks them up for opted-in apps — no double-cache.
+            $this->optimizes(optimize: 'grease:view-cache', clear: 'grease:view-clear', key: 'views');
         }
     }
 

@@ -50,7 +50,11 @@ class GreaseConfigServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([ConfigCacheCommand::class]);
+            $this->commands([ConfigCacheCommand::class, ConfigClearCommand::class]);
+
+            // Shadow the native `config` slot in `optimize` / `optimize:clear` with the greased
+            // supersets, so a standard deploy picks them up for opted-in apps — no double-cache.
+            $this->optimizes(optimize: 'grease:config-cache', clear: 'grease:config-clear', key: 'config');
         }
     }
 

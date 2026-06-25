@@ -24,7 +24,11 @@ class GreaseRoutingServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([RouteMiddlewareCacheCommand::class]);
+            $this->commands([RouteMiddlewareCacheCommand::class, RouteMiddlewareClearCommand::class]);
+
+            // Shadow the native `routes` slot in `optimize` / `optimize:clear` with the greased
+            // supersets, so a standard deploy picks them up for opted-in apps — no double-cache.
+            $this->optimizes(optimize: 'grease:route-cache', clear: 'grease:route-clear', key: 'routes');
         }
 
         $this->loadMiddlewareIndex();
