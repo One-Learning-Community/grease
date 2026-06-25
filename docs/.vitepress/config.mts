@@ -30,6 +30,17 @@ export default defineConfig({
     ['meta', { property: 'og:image', content: 'https://one-learning-community.github.io/grease/og-image.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:image', content: 'https://one-learning-community.github.io/grease/og-image.png' }],
+    // Cloudflare Web Analytics (public beacon token; cookieless). Keyed on the github.io
+    // hostname, so the same token serves every One-Learning-Community docs site — filter by
+    // page path (/grease/…) in the CF dashboard to separate projects.
+    [
+      'script',
+      {
+        defer: '',
+        src: 'https://static.cloudflareinsights.com/beacon.min.js',
+        'data-cf-beacon': '{"token": "b9e858dff0e743cf852f98b0b4a491a0"}',
+      },
+    ],
   ],
 
   themeConfig: {
