@@ -1,0 +1,8 @@
+# Lean context — composer reinstalls vendor in-image; docs/git not needed for benches.
+vendor
+node_modules
+.git
+docs
+.bench-tmp
+.bench-out
+.phpunit.cache
