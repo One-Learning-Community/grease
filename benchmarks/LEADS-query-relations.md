@@ -45,7 +45,9 @@ verdict every call (a `hasNamedScope` probe + a 32-element `in_array(strtolower(
 greased builder memoizes the verdict per (model class, method) — immutable, class-pure, never
 invalidated. Macros re-probed live (can't be shadowed). Seam: `HasGreasedQueries` →
 `Grease\Database\Eloquent\Builder`, only the default builder greased (custom builder attribute /
-`static::$builder` honoured). **Honest scope correction:** `where`/`orWhere`/`latest`/`oldest`/`whereNot`
+`static::$builder` honoured). **Standalone per-model opt-in — deliberately NOT bundled into
+`HasGrease`** (its app-wide builder swap is disproportionate to a sub-0.1%-of-a-request gain; see
+the verdict below). **Honest scope correction:** `where`/`orWhere`/`latest`/`oldest`/`whereNot`
 are DEFINED on Eloquent\Builder and bypass `__call`, so the memo helps the *other* forwarded verbs
 (orderBy/whereIn/select/limit/groupBy/having/…), not `where()`. A/B `builder_call_ab.php`: −7.4%
 Linux/NAS (−9.8% macOS) on a 7-forwarded-verb chain (pure dispatch); low single digits once SQL +

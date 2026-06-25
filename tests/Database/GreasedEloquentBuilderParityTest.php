@@ -37,6 +37,7 @@ class VanillaQb extends Model
 class GreasedQb extends Model
 {
     use HasGrease;
+    use HasGreasedQueries; // not bundled into HasGrease — opt in explicitly
     use QbScopes;
 
     public $timestamps = false;
@@ -52,6 +53,7 @@ class QbCustomBuilder extends BaseBuilder {}
 class GreasedQbWithCustomBuilder extends Model
 {
     use HasGrease;
+    use HasGreasedQueries; // not bundled into HasGrease — opt in explicitly
 
     public $timestamps = false;
 
@@ -89,6 +91,7 @@ class VanillaScopeShadow extends Model
 class GreasedScopeShadow extends Model
 {
     use HasGrease;
+    use HasGreasedQueries; // not bundled into HasGrease — opt in explicitly
     use QbCollidingScopes;
 
     public $timestamps = false;
@@ -124,6 +127,7 @@ class VanillaStiChild extends VanillaStiParent
 class GreasedStiParent extends Model
 {
     use HasGrease;
+    use HasGreasedQueries; // not bundled into HasGrease — opt in explicitly
 
     public $timestamps = false;
 

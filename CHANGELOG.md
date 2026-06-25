@@ -22,12 +22,14 @@ All notable changes to `grease` are documented here. The format is based on
 ### Performance
 
 - **Eloquent builder `__call` dispatch verdict memoized** (`HasGreasedQueries` +
-  `Grease\Database\Eloquent\Builder`, folded into `HasGrease`). The scope/passthru/forward decision
-  re-resolved on every forwarded query verb (`orderBy`/`whereIn`/`select`/`limit`/…) is now cached
-  per `(model class, method)`. Macros are re-probed live (never shadowed); a custom builder
-  (`#[UseEloquentBuilder]` or `static::$builder`) is honoured untouched. Behaviour-identical;
-  −7.4% on a pure-dispatch chain (`where`/`orWhere` are defined on the builder and bypass `__call`,
-  so unaffected).
+  `Grease\Database\Eloquent\Builder`, a **standalone per-model opt-in — deliberately NOT bundled
+  into `HasGrease`**). The scope/passthru/forward decision re-resolved on every forwarded query verb
+  (`orderBy`/`whereIn`/`select`/`limit`/…) is cached per `(model class, method)`. Macros are
+  re-probed live (never shadowed); a custom builder (`#[UseEloquentBuilder]` or `static::$builder`)
+  is honoured untouched. Behaviour-identical; −7.4% on a pure-dispatch chain (`where`/`orWhere` are
+  defined on the builder and bypass `__call`, so unaffected). À la carte because it swaps a custom
+  builder in app-wide for a sub-0.1%-of-a-real-request gain — worth it only on
+  query-construction-heavy paths, so add `use HasGreasedQueries;` explicitly where you want it.
 - **`wrapTable()` identifier quoting memoized** alongside the shipped `wrap()` memo (same key domain
   — table + connection prefix — and the same prefix-flush invalidation). Byte-identical; a sub-µs
   per-query rider that compounds under Octane.

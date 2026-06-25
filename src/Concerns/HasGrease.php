@@ -22,10 +22,16 @@ namespace Grease\Concerns;
  *   - HasGreasedCastProbes      (per-key isEnum/isClass/isClassSerializable cast-probe memo)
  *   - HasGreasedSerialization   (date serialization round-trip elimination)
  *   - HasGreasedPivots          (greased pivot model for many-to-many relations)
- *   - HasGreasedQueries         (Eloquent builder __call dispatch-verdict memo)
  *
  * Every tier is a method override that falls back to `parent::`, so output stays
  * byte-identical to vanilla Eloquent. Non-greased models are untouched.
+ *
+ * Deliberately NOT bundled: `HasGreasedQueries` (the Eloquent builder `__call`
+ * dispatch-verdict memo). It's behaviour-identical and audited, but it swaps a custom
+ * builder in for *every* query on the model app-wide for a sub-0.1%-of-a-real-request
+ * gain (the dominant `where`/`orWhere` verbs bypass `__call` entirely). That reach
+ * isn't worth a default — add `use HasGreasedQueries;` explicitly on a model only if
+ * you're chasing every last cycle (e.g. a query-construction-heavy admin/reporting path).
  */
 trait HasGrease
 {
@@ -36,6 +42,5 @@ trait HasGrease
     use HasGreasedHydration;
     use HasGreasedInitializers;
     use HasGreasedPivots;
-    use HasGreasedQueries;
     use HasGreasedSerialization;
 }
