@@ -120,3 +120,11 @@ php artisan grease:config-cache    # config:cache + the opcache-interned flat le
 The provider loads the index only when it's at least as fresh as the config cache, so a later
 plain `config:cache` or `config:clear` transparently disables a stale index — you're never served
 a config that doesn't match. In development (no config cache) it simply falls back to the lazy memo.
+
+::: tip Or just run `php artisan optimize`
+With the provider registered, `optimize` runs `grease:config-cache` in its `config` slot
+automatically (in place of `config:cache`), and `optimize:clear` runs the clear twin,
+`grease:config-clear` — so a standard deploy needs no grease-specific step. Note the clear twin is a
+**superset** of `config:clear`: running it (directly or via `optimize:clear`) also drops the
+framework config cache — the mirror of `grease:config-cache` being a superset of `config:cache`.
+:::

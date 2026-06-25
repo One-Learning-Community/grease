@@ -68,6 +68,10 @@ The router additionally has an eager, opcache-interned middleware index — regi
 with `php artisan grease:view-cache` (a `view:cache` twin) and view resolution becomes an
 opcache-interned lookup — no per-render filesystem stat-walk.
 
+Each cache command also hooks `php artisan optimize`: with the provider registered, a standard
+`optimize` runs the grease cache in its slot (and `optimize:clear` the matching clear twin), so your
+deploy needs no grease-specific step.
+
 See [The Container](https://one-learning-community.github.io/grease/guide/container),
 [The Request](https://one-learning-community.github.io/grease/guide/request),
 [The Router](https://one-learning-community.github.io/grease/guide/routing), and

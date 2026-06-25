@@ -74,9 +74,9 @@ Yes — three layers keep it safe:
   changes resolution for an unknown one.
 - **Freshness guard.** The index loads only while it's at least as new as the compiled-view cache
   **and** the config cache (which holds `view.paths`). `grease:view-cache` writes it last, so it
-  passes; a later plain `view:cache`, `config:cache`, or `php artisan optimize` makes one of those
-  newer and the now-stale index is ignored — you fall back to live resolution, never served a wrong
-  path.
+  passes; a later plain `view:cache` or `config:cache` makes one of those newer and the now-stale
+  index is ignored — you fall back to live resolution, never served a wrong path. (`php artisan
+  optimize` instead *rebuilds* it, since it runs `grease:view-cache` — see below.)
 - **Inert in development.** No artifact → nothing is swapped (a greased-but-empty finder would be
   pure overhead, so it isn't even installed); resolution is 100% vanilla.
 
@@ -85,6 +85,14 @@ the index is a deploy artifact, so **rebuild it on deploy**. A structural change
 (add / move / delete) needs a rebuild, exactly as `view:cache` does. In-place *edits* don't: the
 name→source mapping is unchanged and recompilation is left entirely to the framework's own
 `isExpired` check.
+
+::: tip Or just run `php artisan optimize`
+With the provider registered, `optimize` runs `grease:view-cache` in its `views` slot automatically
+(in place of `view:cache`), and `optimize:clear` runs the clear twin, `grease:view-clear` — so a
+standard deploy needs no grease-specific step. The clear twin is a **superset** of `view:clear`:
+running it (directly or via `optimize:clear`) also drops the compiled views — the mirror of
+`grease:view-cache` being a superset of `view:cache`.
+:::
 
 ## Under Octane vs FPM
 
@@ -133,6 +141,7 @@ That alone gives the lazy Blade wins and carries no caveat. For the eager view i
 php artisan grease:view-cache   # view:cache + the opcache-interned resolution index
 ```
 
-Run it **last** in your deploy (it runs `view:cache` itself), so a later `view:cache` / `optimize`
-doesn't shadow it. Without a fresh artifact the provider is inert for resolution — the framework's
-own memo (and the greased compiler's) still apply.
+Run it **last** in your deploy (it runs `view:cache` itself), so a later plain `view:cache` doesn't
+shadow it — or skip the manual step entirely and run `php artisan optimize`, which now runs
+`grease:view-cache` in its `views` slot for you (see the tip above). Without a fresh artifact the
+provider is inert for resolution — the framework's own memo (and the greased compiler's) still apply.

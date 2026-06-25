@@ -138,8 +138,9 @@ These are a *different axis* from the model traits, with their own opt-in — se
   *gate middleware registration* on the environment — a provider that registers middleware only
   under `runningInConsole()`, or an env/flag-conditional alias like `throttle` → Redis-vs-sync, would
   make the cached resolution disagree with serving. Rebuild on every deploy; the freshness guard
-  disables a stale index after any `route:cache` / `route:clear` / `config:cache` / `optimize`, and
-  it's inert in development (no route cache) — so a wrong list is never served, you only lose the
+  disables a stale index after any plain `route:cache` / `route:clear` / `config:cache` (while
+  `optimize` *rebuilds* it, running `grease:route-cache`), and it's inert in development (no route
+  cache) — so a wrong list is never served, you only lose the
   eager win until you re-run `grease:route-cache`. A route whose middleware is assigned dynamically
   simply misses the index and resolves live.
 - **View index** — the lazy Blade greasing (the `view`/`blade.compiler` swaps) has **no
@@ -147,7 +148,8 @@ These are a *different axis* from the model traits, with their own opt-in — se
   **build == runtime** — it's a deploy artifact, so rebuild it on deploy. A structural view change
   (add / move / delete) needs a rebuild, exactly like `view:cache` itself (in-place edits don't —
   the name→path mapping is unchanged and recompilation stays with the framework). The freshness
-  guard disables a stale index after any `view:cache` / `config:cache` / `optimize`; it's inert in
+  guard disables a stale index after any plain `view:cache` / `config:cache` (while `optimize`
+  *rebuilds* it, running `grease:view-cache`); it's inert in
   development (no artifact); and a name the index doesn't contain — added, dynamic, or non-Blade —
   resolves live, byte-identical. So a wrong path is never served.
 

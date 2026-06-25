@@ -73,9 +73,10 @@ just a *pre-seeded lazy cache* — and both share one invalidation story:
   that registers middleware only for `runningInConsole()` (so the console build and HTTP serving
   disagree), or an env/flag-conditional alias such as `throttle` → Redis-vs-sync. Rebuild on every
   deploy, and the freshness guard handles the cached-artifact cases: the index loads only while it's
-  at least as fresh as the route cache **and** the config cache, so a later `route:cache`,
-  `route:clear`, `config:cache`, or `php artisan optimize` automatically disables a now-stale index
-  (you fall back to the lazy memo — never served a wrong list). It is also **inert in development**:
+  at least as fresh as the route cache **and** the config cache, so a later plain `route:cache`,
+  `route:clear`, or `config:cache` automatically disables a now-stale index (you fall back to the
+  lazy memo — never served a wrong list); `php artisan optimize` instead *rebuilds* it, since it runs
+  `grease:route-cache`. It is also **inert in development**:
   with no route cache present, the index never loads.
 
 ## Under Octane vs FPM
@@ -152,6 +153,17 @@ Grease\Routing\GreaseRoutingServiceProvider::class,
 php artisan grease:route-cache   # route:cache + the opcache-interned middleware index
 ```
 
-Run it **last** in your deploy (it runs `route:cache` itself), so a later `route:cache`/`optimize`
-doesn't shadow it. Without the swap, or without a fresh index, the provider is inert — the lazy memo
-still applies.
+Run it **last** in your deploy (it runs `route:cache` itself), so a later plain `route:cache` doesn't
+shadow it — or skip the manual step and run `php artisan optimize`, which now runs `grease:route-cache`
+in its `routes` slot for you.
+
+::: tip `optimize` / `optimize:clear` just work
+With the provider registered, `optimize` runs `grease:route-cache` in its `routes` slot
+automatically (in place of `route:cache`), and `optimize:clear` runs the clear twin,
+`grease:route-clear` — a **superset** of `route:clear` that also drops the route cache, mirroring
+`grease:route-cache`'s superset of `route:cache`. The same holds for the
+[config](/guide/config) and [view](/guide/view-cache) tiers — a standard `optimize` deploy picks up
+every grease cache you've opted into, no grease-specific step.
+:::
+
+Without the swap, or without a fresh index, the provider is inert — the lazy memo still applies.
