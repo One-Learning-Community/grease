@@ -35,7 +35,9 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Why', link: '/guide/why' },
       {
-        text: 'v0.5.0',
+        // Static label, not a version string — Packagist/Releases always show the current
+        // version, so there's nothing to bump here on each release.
+        text: 'Releases',
         items: [
           { text: 'Changelog', link: 'https://github.com/One-Learning-Community/grease/releases' },
           { text: 'Packagist', link: 'https://packagist.org/packages/onelearningcommunity/grease' },

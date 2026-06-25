@@ -6,6 +6,34 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **Greased many-to-many pivot** (`Grease\Eloquent\Pivot` + `HasGreasedPivots`, folded into
+  `HasGrease`). The pivot a `belongsToMany` hydrates per related row is a "dynamic model" the
+  framework builds internally and it never carried Grease's tiers — so a pivot-heavy
+  `belongsToMany()->get()` paid, per pivot row, the full per-row cost the model tiers remove (the
+  `initialize*` booters, `resolveClassAttribute`, and the timestamp Carbon round-trip on
+  `withTimestamps()` pivots). The related model's `newPivot()` now returns a greased pivot for the
+  default case. A relation with `using(CustomPivot::class)` keeps that class, and `morphToMany`
+  pivots stay vanilla `MorphPivot` (the relation builds them, bypassing the model seam) — both
+  unaccelerated but byte-identical. **−75% on a 1,000-pivot-row `get()`** (Linux). Automatic for any
+  model already using `HasGrease`; no API change.
+
+### Performance
+
+- **Eloquent builder `__call` dispatch verdict memoized** (`HasGreasedQueries` +
+  `Grease\Database\Eloquent\Builder`, a **standalone per-model opt-in — deliberately NOT bundled
+  into `HasGrease`**). The scope/passthru/forward decision re-resolved on every forwarded query verb
+  (`orderBy`/`whereIn`/`select`/`limit`/…) is cached per `(model class, method)`. Macros are
+  re-probed live (never shadowed); a custom builder (`#[UseEloquentBuilder]` or `static::$builder`)
+  is honoured untouched. Behaviour-identical; −7.4% on a pure-dispatch chain (`where`/`orWhere` are
+  defined on the builder and bypass `__call`, so unaffected). À la carte because it swaps a custom
+  builder in app-wide for a sub-0.1%-of-a-real-request gain — worth it only on
+  query-construction-heavy paths, so add `use HasGreasedQueries;` explicitly where you want it.
+- **`wrapTable()` identifier quoting memoized** alongside the shipped `wrap()` memo (same key domain
+  — table + connection prefix — and the same prefix-flush invalidation). Byte-identical; a sub-µs
+  per-query rider that compounds under Octane.
+
 ## [0.5.1] - 2026-06-24
 
 A byte-identical hardening release. A full parity audit of the whole package surfaced four

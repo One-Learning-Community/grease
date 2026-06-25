@@ -100,6 +100,10 @@ byte-identity, it hands the work back to the framework:
 - **Exotic date serialization** — non-UTC default serializers, custom date formats,
   `date`/`immutable_date` casts, sub-second or non-string values. The serialization
   tier's per-value shape guard defers these to vanilla automatically.
+- **Custom `using()` pivots and `morphToMany` pivots** — the greased pivot
+  (`HasGreasedPivots`) only substitutes the *default* `Pivot`. A relation that declares
+  `using(CustomPivot::class)` keeps that class, and `morphToMany` builds its `MorphPivot`
+  on the relation (bypassing the model's `newPivot` seam) — both stay vanilla, unaccelerated.
 
 All of the above produce identical output; they simply don't get the fast path.
 

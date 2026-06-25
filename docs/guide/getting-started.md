@@ -16,7 +16,8 @@ query. Take the ones whose hot paths you actually run; the model trait is just t
 
 | Tier | How you opt in | What it speeds up |
 |---|---|---|
-| **Model** | `use HasGrease;` | hydration, casting, serialization, dirty-check |
+| **Model** | `use HasGrease;` | hydration, casting, serialization, dirty-check, m2m pivots |
+| **Builder dispatch** (opt-in, not in `HasGrease`) | `use HasGreasedQueries;` | Eloquent builder `__call` resolution per query verb |
 | [**Events**](/guide/events) | `GreaseEventServiceProvider` | every dispatch, app-wide |
 | [**Blade**](/guide/blade) | `GreaseViewServiceProvider` | `@props` + attribute-merge per component |
 | [**View cache**](/guide/view-cache) | same provider + `grease:view-cache` | view name→path resolution |
@@ -68,8 +69,9 @@ Octane-safe. Add the trait, deploy, move on.
 
 ## Pick your tiers (optional)
 
-`HasGrease` bundles seven composable tiers. You can also use any subset à la carte —
-they share one per-class blueprint and compose freely; for example:
+`HasGrease` bundles eight composable tiers (including `HasGreasedPivots`, which greases the
+many-to-many pivot automatically). You can also use any subset à la carte — they share one
+per-class blueprint and compose freely; for example:
 
 ```php
 use Grease\Concerns\HasGreasedHydration;     // construct / hydration
@@ -87,6 +89,12 @@ class User extends Model
 The only tier with a (tiny, obscure) behavioural narrowing is `HasGreasedCasts` —
 see [Caveats](/guide/caveats). Want the hydration and metadata wins with **zero**
 cast caveats? Use the two tiers above and skip the cast one.
+
+One model-axis tier sits **outside** the `HasGrease` bundle on purpose:
+`use Grease\Concerns\HasGreasedQueries;` memoizes the Eloquent builder's `__call` dispatch
+verdict (the scope/passthru/forward decision re-resolved on every forwarded query verb). It's
+byte-identical, but it swaps a custom builder in for every query on the model for a sub-0.1%-of-
+a-request gain — so it's a deliberate opt-in for query-construction-heavy paths, not a default.
 
 ## The faster event dispatcher (optional, app-wide)
 
