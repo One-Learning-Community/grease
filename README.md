@@ -81,6 +81,7 @@ Representative deltas, measured on Linux ([reproduce on your own build](https://
 - **End-to-end requests (incl. SQL):** −86% list-100-users, −82% eager-load, −47% show, −15% bulk write.
 <!-- BENCH:END -->
 - **Per operation:** hydrate −54%, `toArray` −53%, set+dirty −62%, read −27%, enum −44%, date serialization −87%.
+- **Many-to-many pivots** (model tier, automatic with the trait): the pivot a `belongsToMany` hydrates per related row was the one model class the tiers couldn't reach — now greased too, **−75% on a pivot-heavy `get()`** (Linux). A custom `using()` pivot or a `morphToMany` pivot stays vanilla — unaccelerated, byte-identical. Two small per-query riders join it: a memoized Eloquent builder `__call` dispatch and `wrapTable()` identifier quoting.
 - **Event dispatcher** (app-wide): −53% no-listener dispatch, ~halves a render-dense request's event overhead.
 - **Blade** (render path, app-wide): −28.3% simple / −23.4% rich component renders, −26.8% a `$loop`-heavy table, −20.3% a layout — byte-identical HTML.
 - **Config** (`config()` reads, app-wide): a memoized read path (`−65%` on a repeat-heavy mix), and an opcache-interned flat index via `grease:config-cache` that cuts `~88%` of config-read time — a per-request win that scales with how many reads your app makes (real apps make thousands).
