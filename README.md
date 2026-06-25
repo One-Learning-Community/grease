@@ -5,7 +5,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/onelearningcommunity/grease.svg)](https://packagist.org/packages/onelearningcommunity/grease)
 [![License](https://img.shields.io/packagist/l/onelearningcommunity/grease.svg)](LICENSE)
 
-**Opt-in performance across Laravel's hot paths — a menu of byte-identical tiers, built from optimizations declined upstream.**
+**Opt-in performance across Laravel's hot paths — a menu of byte-identical tiers.**
 
 Grease is a menu of independent, **byte-identical** optimizations spanning the whole request
 lifecycle — Eloquent hydration/casting/serialization, the event dispatcher, the Blade
@@ -94,6 +94,11 @@ These are `:memory:`/Linux figures — read them as Grease's share of the work, 
 and reproduce on your target. The [Benchmarks guide](https://one-learning-community.github.io/grease/guide/benchmarks)
 has the methodology, the build-to-build variance, and the honest caveats.
 
+**Running Octane?** The case is stronger still. A persistent worker amortizes the framework
+boot that dilutes Grease under FPM, so the work it removes becomes a visible share of every
+request — and `HasGrease` on your models alone is enough to justify it.
+See [Grease & Octane](https://one-learning-community.github.io/grease/guide/octane).
+
 ## Byte-identical, or it's a failing test
 
 That promise is the whole product. Every cast type, edge value, null, and dirty-check is
@@ -109,7 +114,8 @@ composer bench    # phpbench per-op A/B + the SQL suite
 ## Learn more
 
 - **[Getting Started](https://one-learning-community.github.io/grease/guide/getting-started)** — install, the à-la-carte tiers, the optional providers
-- **[Why Grease](https://one-learning-community.github.io/grease/guide/why)** — the "marginal in isolation" story and the declined core PRs
+- **[Why Grease](https://one-learning-community.github.io/grease/guide/why)** — the "marginal in isolation" story behind the package
+- **[Grease & Octane](https://one-learning-community.github.io/grease/guide/octane)** — why a persistent worker amplifies every tier
 - **[How It Works](https://one-learning-community.github.io/grease/guide/how-it-works)** — the per-class blueprint and each tier
 - **[Benchmarks](https://one-learning-community.github.io/grease/guide/benchmarks)** — full numbers, methodology, and reproducing them on your build
 - **[The Method](https://one-learning-community.github.io/grease/guide/method)** — how a win is found and proven (and how the dead ends got rejected)
@@ -128,4 +134,4 @@ Released under the [MIT License](LICENSE) — Copyright © 2026 One Learning Com
 
 Grease was built proudly in collaboration with [Claude](https://claude.com/claude-code)
 — a small proof of what a strong engineering mindset and AI can do together: measure
-first, keep the parity spine honest, and ship the wins core couldn't.
+first, keep the parity spine honest, and ship wins that compound.
