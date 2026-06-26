@@ -14,8 +14,9 @@
  * Each is timed across four corners (vanilla, +model trait only, +foundation tiers only, full stack)
  * so the decomposition shows the win is almost entirely the model trait, not the container/view/event
  * tiers (a single component resolve is a thin slice of a request). The two shapes show WHERE it lands:
- *   - ShowUser  — holds a live model property → the update RE-QUERIES it (model tier re-fires).
- *   - UserCard  — holds a `toArray()` array → the update rehydrates a cached array (model tier sits out).
+ *   - ShowUser  — query-active: holds a model property AND lists its posts, so every update RE-QUERIES
+ *                 the user + its posts (the model tier re-fires across the whole result set).
+ *   - UserCard  — cached: holds a `toArray()` array, so the update rehydrates plain data (tier sits out).
  * The model-tier win scales with the number of `new Model()` a path hydrates, so the headline mount
  * delta recurs on update only in proportion to the models that update re-queries — not as a blanket.
  *
@@ -229,8 +230,8 @@ echo "($rounds rounds × $iterations iterations each)...\n\n";
 //   - ShowUser holds a live model property → the update path re-queries it (model tier re-fires);
 //   - UserCard holds a toArray() array → the update rehydrates a cached array (model tier sits out).
 $shapes = [
-    'model-as-property (ShowUser — re-queries the model on update)' => [VanillaShowUser::class, GreasedShowUser::class],
-    'toArray() array (UserCard — cached array, no re-query on update)' => [VanillaUserCard::class, GreasedUserCard::class],
+    'query-active (ShowUser — re-queries user + posts on every update)' => [VanillaShowUser::class, GreasedShowUser::class],
+    'cached array (UserCard — toArray() snapshot, no re-query on update)' => [VanillaUserCard::class, GreasedUserCard::class],
 ];
 
 foreach ($shapes as $title => [$vanilla, $greased]) {
@@ -279,14 +280,13 @@ foreach ($shapes as $title => [$vanilla, $greased]) {
     echo "\n";
 }
 
-echo "Read each shape's mount-vs-update, not across shapes (they load different model counts:\n";
-echo "ShowUser hydrates 1 model, UserCard 9 via with('posts') — which is the whole mount gap).\n";
 echo "The model-tier win is a FIXED cost per `new Model()` (reflection, class-attribute\n";
-echo "resolution, the initialize* booters), so it scales with how many models a path hydrates:\n";
-echo "  - UserCard: huge on MOUNT (9 models) but ~0 on UPDATE — the update rehydrates a cached\n";
-echo "    toArray() array, never re-queries, so the model tier sits out (only render + checksum).\n";
-echo "  - ShowUser: small but REAL on update — the model-as-property re-queries on every update,\n";
-echo "    so the tier re-fires (here ~1 model's worth; it scales with the models you re-query).\n";
-echo "So the headline mount delta does NOT blanket-recur every interaction: it recurs in\n";
-echo "proportion to the models a given update re-hydrates. Confirm on your own stack (NOTES:\n";
-echo "macOS distorts; this also reproduces on Linux+JIT via benchmarks/docker).\n";
+echo "resolution, the initialize* booters), so it scales with how many models a path hydrates —\n";
+echo "and the two shapes show that update cost tracks update WORK:\n";
+echo "  - ShowUser (query-active): the win recurs on UPDATE because every update re-queries the\n";
+echo "    user + its posts — a data table sorting/paginating/filtering behaves the same way.\n";
+echo "  - UserCard (cached): ~0 on UPDATE — it rehydrates a cached toArray() array, never\n";
+echo "    re-queries, so the model tier sits out (only render + checksum remain). And that's fine.\n";
+echo "So the headline does NOT blanket-recur every interaction: an update that does no model work\n";
+echo "is free; one that re-queries gets the win, scaled to the query. Confirm on your own stack\n";
+echo "(NOTES: macOS distorts; this also reproduces on Linux+JIT via benchmarks/docker).\n";
