@@ -23,12 +23,20 @@ abstract class UserCard extends Component
     /** @var array<string, mixed> */
     public array $data = [];
 
+    public int $bumps = 0;
+
     /** @return class-string */
     abstract protected function model(): string;
 
     public function mount(int $id): void
     {
         $this->data = ($this->model())::with('posts')->findOrFail($id)->toArray();
+    }
+
+    /** A wire:click round-trip — mirrors {@see ShowUser::bump()} so both shapes run the same update. */
+    public function bump(): void
+    {
+        $this->bumps++;
     }
 
     public function render()
