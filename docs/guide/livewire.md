@@ -83,6 +83,11 @@ cheap with or without Grease, and that's fine. The win tracks the work: an inter
 model work gets greased every time; one that does none costs nothing either way. So the more your
 components actually *do* per click, the more this is doing for you.
 
+This is why **[Filament](https://filamentphp.com)** benefits so directly: it's built on Livewire,
+and a Filament table re-queries on every sort, filter, and page — the query-active shape, on every
+interaction. Put `HasGrease` on the models behind your resources and every table interaction takes
+the greased path.
+
 ## Getting started
 
 There's nothing Livewire-specific to install or configure. Add `HasGrease` to the
