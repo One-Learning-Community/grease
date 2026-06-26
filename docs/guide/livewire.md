@@ -44,10 +44,11 @@ across mount → action → update:
 
 ## Where the win is
 
-The same `benchmarks/livewire_ab.php` that gates that parity then times a
-`Livewire::mount()` — hydrate the model, render the component, dehydrate its `toArray()`
-payload into a checksummed snapshot — across four corners, so you can see *which* tier the
-saving comes from rather than just a headline:
+The same `benchmarks/livewire_ab.php` that gates that parity then times both Livewire paths —
+the initial `mount()` and the `update()` round-trip every interaction fires — across four
+corners, so you can see *which* tier the saving comes from rather than just a headline. On
+**mount** (hydrate the model, render, dehydrate the `toArray()` payload into a checksummed
+snapshot):
 
 | | vs vanilla |
 |---|---|
@@ -72,8 +73,15 @@ counts is the one you measure on your own components and database:
 php benchmarks/livewire_ab.php
 ```
 
-A Livewire update re-runs this whole path on every interaction, so whatever delta you measure
-on mount recurs for the life of the page — not just on first paint.
+**What every later interaction costs depends on what the update does** — and the bench times
+that too, across two component shapes. An update that **re-queries** — a data table that sorts,
+paginates or filters, or any view backed by a fresh query — re-hydrates its models every time,
+so the model-tier win **recurs at the scale of that query** (the bench's query-active shape lands
+within a point or two of its own mount delta, on every interaction). An update that re-renders a
+**cached `toArray()` array** without touching the database lets the model tier sit out — it's
+cheap with or without Grease, and that's fine. The win tracks the work: an interaction that does
+model work gets greased every time; one that does none costs nothing either way. So the more your
+components actually *do* per click, the more this is doing for you.
 
 ## Getting started
 
