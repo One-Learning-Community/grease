@@ -8,12 +8,14 @@
  * a stack of exactly the tiers Grease accelerates — hydration, casting, date serialization,
  * `toArray()`, and the Blade compiler — fired on every round-trip rather than once per request.
  *
- * This sizes what the full greased stack buys on a Livewire initial render: a fully-configured
- * Testbench app boots vanilla vs greased (greased container + view + event providers + a greased
- * model), and `Livewire::mount()` is timed — the path that hydrates the model from the DB,
- * renders the component, dehydrates the `toArray()` payload (ISO dates, the loaded relation),
- * generates the checksum, and embeds it. The component is the UserCard fixture, whose state
- * is a serialized model — so the date/`toArray` tiers actually land in the measured work.
+ * This sizes — and *attributes* — what Grease buys on a Livewire initial render. A fully-
+ * configured Testbench app times `Livewire::mount()` (hydrate the model from the DB, render the
+ * component, dehydrate the `toArray()` payload — ISO dates, the loaded relation — to a checksummed
+ * snapshot) across four corners: vanilla, +model trait only, +foundation tiers only, and the full
+ * stack. The decomposition is the point: it shows the win is almost entirely the model trait, not
+ * the container/view/event tiers (a single component resolve is a thin slice of a request). The
+ * component is the UserCard fixture, whose state is a serialized model — so the date/`toArray`
+ * tiers land squarely in the measured work.
  *
  * Each arm runs in its own subprocess (two full apps in one process collide on facade / static
  * state, and a greased-container arm needs a different Application class — same reason as
@@ -176,26 +178,47 @@ $runArm = function (string $resolver, string $component) use ($php, $self, $iter
     return ['us' => $us[intdiv(count($us), 2)], 'data' => $data];
 };
 
-echo "Booting Testbench + Livewire, vanilla vs greased ($rounds rounds × $iterations mounts)...\n\n";
+echo "Booting Testbench + Livewire, four corners ($rounds rounds × $iterations mounts each)...\n\n";
 
-$vanilla = $runArm(VanillaLivewireResolver::class, VanillaUserCard::class);
-$greased = $runArm(GreasedLivewireResolver::class, GreasedUserCard::class);
+// The resolver controls the foundation tiers (container/view/events); the component class
+// controls the model tier (Greased vs Plain). The four corners isolate which tier the win
+// actually comes from — the surprise being that on a single-component mount it's almost all
+// the model trait, with the foundation tiers a thin slice on top (one component resolve is a
+// small fraction of a request — see the container guide).
+$baseline = $runArm(VanillaLivewireResolver::class, VanillaUserCard::class);   // nothing greased
+$model = $runArm(VanillaLivewireResolver::class, GreasedUserCard::class);      // + model trait only
+$foundation = $runArm(GreasedLivewireResolver::class, VanillaUserCard::class); // + container/view/events only
+$full = $runArm(GreasedLivewireResolver::class, GreasedUserCard::class);       // everything
 
-// ---- Parity gate: the dehydrated snapshot must be byte-identical ----------------
+// ---- Parity gate: the greased snapshot must be byte-identical to vanilla ---------
+// This is the contract: a greased model serialized through Livewire must dehydrate exactly
+// like a vanilla one (same ISO dates, same decimal string, same relation), or the checksum
+// breaks. The model-only and full arms both carry the greased model, so both must match the
+// vanilla baseline byte-for-byte.
 
-if ($vanilla['data'] !== $greased['data']) {
-    echo "PARITY FAILED — dehydrated snapshot data differs:\n  vanilla: {$vanilla['data']}\n  greased: {$greased['data']}\n";
-    exit(1);
+foreach (['model' => $model, 'full' => $full] as $label => $arm) {
+    if ($baseline['data'] !== $arm['data']) {
+        echo "PARITY FAILED ($label) — dehydrated snapshot data differs from vanilla:\n";
+        echo "  vanilla: {$baseline['data']}\n  greased: {$arm['data']}\n";
+        exit(1);
+    }
 }
-echo "Parity: OK (dehydrated snapshot data byte-identical)\n\n";
+echo "Parity: OK (greased snapshot data byte-identical to vanilla)\n\n";
 
-// ---- Report --------------------------------------------------------------------
+// ---- Report: each tier's contribution, baseline-relative ------------------------
 
-$delta = ($greased['us'] - $vanilla['us']) / $vanilla['us'] * 100;
-printf("%-28s %12s %12s %8s\n", '', 'vanilla', 'greased', 'delta');
-printf("%-28s %10.2f µs %10.2f µs %+7.1f%%\n", 'Livewire::mount (render)', $vanilla['us'], $greased['us'], $delta);
+$delta = fn (array $arm) => ($arm['us'] - $baseline['us']) / $baseline['us'] * 100;
 
-echo "\nThe initial mount hydrates the model, renders the component, and dehydrates its\n";
-echo "toArray() payload into a checksummed snapshot — the model, view, and serialization\n";
-echo "tiers stacked. A subsequent update re-runs the same path, so this delta recurs on\n";
-echo "every interaction, not just first paint. macOS figures — confirm on Linux/docker.\n";
+printf("%-34s %12s %8s\n", 'Livewire::mount', 'median', 'vs base');
+printf("%-34s %10.2f µs %8s\n", 'vanilla (baseline)', $baseline['us'], '—');
+printf("%-34s %10.2f µs %+7.1f%%\n", '+ HasGrease on the model only', $model['us'], $delta($model));
+printf("%-34s %10.2f µs %+7.1f%%\n", '+ container/view/events only', $foundation['us'], $delta($foundation));
+printf("%-34s %10.2f µs %+7.1f%%\n", 'full greased stack', $full['us'], $delta($full));
+
+echo "\nThe mount hydrates the model (+ its loaded relation) and dehydrates the toArray()\n";
+echo "payload into a checksummed snapshot — and the model trait alone carries nearly the\n";
+echo "whole delta, because Grease's per-instance overhead kill (reflection, class-attribute\n";
+echo "resolution, the initialize* booters) is a FIXED cost per `new Model()` that dominates\n";
+echo "for small rows. A Livewire update re-runs this path every interaction, so the delta\n";
+echo "recurs — not just on first paint. Confirm on your own stack (NOTES: macOS distorts;\n";
+echo "this also reproduces on Linux+JIT via benchmarks/docker).\n";

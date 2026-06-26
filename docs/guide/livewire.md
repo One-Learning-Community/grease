@@ -58,34 +58,49 @@ checks, across mount → action → update:
 Because the snapshots are identical, a mixed greased/vanilla fleet is safe: there's no
 boundary for a checksum to straddle.
 
-## What it's worth
+## What it's worth — and where the win actually is
 
 The same `benchmarks/livewire_ab.php` that gates the parity above then times a
-`Livewire::mount()` — the path that hydrates the model, renders the component, and
-dehydrates its `toArray()` payload into a checksummed snapshot — on the full greased stack
-(greased [container](/guide/container), [view](/guide/blade), and
-[event](/guide/events) tiers plus a greased model) versus vanilla.
+`Livewire::mount()` — hydrate the model, render the component, dehydrate its `toArray()`
+payload into a checksummed snapshot — across four corners, so you can see *which* tier the
+saving comes from rather than just a headline:
 
-On a Mac that lands around **−48%** on the mount path. Trust the direction, not the digits:
-as everywhere in these docs, [macOS distorts the magnitude](/guide/benchmarks) — reproduce
-it on your own stack:
+| | vs vanilla |
+|---|---|
+| `+ HasGrease` on the model **only** | **≈ −45 to −50%** |
+| `+` container / view / event tiers only | ≈ −0 to −5% |
+| full greased stack | ≈ −48 to −50% |
+
+The surprise is that **the model trait alone carries nearly the whole delta** — the
+foundation tiers are a thin slice on top, because a single component resolve is a small
+fraction of the work (the [container tier](/guide/container) shaves a request elsewhere,
+not here). Why is one trait worth half a mount? Because Grease's model tier kills
+*per-instance* overhead — reflection, the [class-attribute resolution](/guide/how-it-works),
+the `initialize*` booters — which is a **fixed cost per `new Model()`** that doesn't shrink
+when the row is small. A Livewire mount hydrates the component's model **and its loaded
+relations** (the bench's fixture is one user + eight posts — nine models), so that fixed
+overhead is paid nine times and greasing it lands hard. It's the same mechanism behind the
+[`index_users` macro](/guide/benchmarks).
+
+Trust the direction, not the digits. This reproduces at the same magnitude on both macOS and
+Linux+JIT (`benchmarks/docker`), but — in the spirit of the
+[Octane page](/guide/octane#why-there-s-no-benchmark-table-on-this-page) — the honest number
+is the one you measure on your own components and database:
 
 ```bash
 php benchmarks/livewire_ab.php
 ```
 
-And, in the spirit of the [Octane page](/guide/octane#why-there-s-no-benchmark-table-on-this-page):
-the honest number is the one you measure on your own components, against your own database,
-with your own worker model. A Livewire update re-runs this whole path on every interaction,
-so whatever delta you measure on mount recurs for the life of the page — not just on first
-paint.
+A Livewire update re-runs this whole path on every interaction, so whatever delta you measure
+on mount recurs for the life of the page — not just on first paint.
 
 ## Getting started
 
 There's nothing Livewire-specific to install or configure. Add `HasGrease` to the
-[Eloquent models](/guide/getting-started) your components use, and — if you want the view
-and foundation tiers too — opt into the [Blade](/guide/blade),
-[container](/guide/container), and [event](/guide/events) tiers exactly as you would for a
-classic app. Livewire renders Blade and resolves through the container like everything else,
-so those tiers apply unchanged. The model trait alone is enough to justify the experiment on
-a component-heavy page; the rest is compounding upside.
+[Eloquent models](/guide/getting-started) your components use — that's it. The
+[Blade](/guide/blade), [container](/guide/container), and [event](/guide/events) tiers all
+apply unchanged (Livewire renders Blade and resolves through the container like everything
+else), and they're worth turning on — but the four-corner number above is unambiguous about
+the priority: **if you take nothing else from this package, put `HasGrease` on the models your
+components touch.** On a component-heavy page that single trait is where the request goes; the
+rest is compounding upside.
