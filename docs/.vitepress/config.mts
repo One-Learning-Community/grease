@@ -47,7 +47,6 @@ export default defineConfig({
     logo: '/logo.svg',
 
     nav: [
-      { text: 'Benchmarks', link: '/guide/benchmarks' },
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Why', link: '/guide/why' },
       {
