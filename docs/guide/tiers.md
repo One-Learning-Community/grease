@@ -15,6 +15,9 @@ request-wide number; see each page for the measured figure). 🔥 small or condi
 🔥🔥 solid · 🔥🔥🔥 broad and large. Risk **None** means byte-identical to vanilla with nothing
 to promise; the parity suite proves it.
 
+*Your fire may vary. These flames are our boxes and our workloads — the only benchmark that
+counts is yours, on your hardware, with your traffic. Measure it.*
+
 ## Start here — the no-brainers
 
 Add a trait to your models. Nothing to configure, nothing app-wide.
