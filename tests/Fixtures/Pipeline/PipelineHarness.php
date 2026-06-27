@@ -34,15 +34,17 @@ final class PipelineHarness
         3 => '+ blade',
         4 => '+ container',
         5 => '+ request',
+        6 => '+ url',
     ];
 
-    /** Five query shapes × two response modes. */
+    /** Six query shapes × two response modes. */
     public const ROUTES = [
         'index_users.json', 'index_users.blade',
         'posts_with_author.json', 'posts_with_author.blade',
         'show_post.json', 'show_post.blade',
         'bulk_update.json', 'bulk_update.blade',
         'filtered_users.json', 'filtered_users.blade',
+        'api_resource.json', 'api_resource.blade',
     ];
 
     /** Routes that mutate the DB — parity-probed inside a rolled-back transaction. */
@@ -140,6 +142,11 @@ final class PipelineHarness
 
     private static function registerRoutes($router, array $m): void
     {
+        // --- Named link targets the API-Resource shapes generate URLs to (never dispatched
+        // here — just route() destinations). Simple shapes the URL tier fast-paths. ---
+        $router->get('/api/users/{user}', fn () => '')->name('api.users.show');
+        $router->get('/api/posts/{post}', fn () => '')->name('api.posts.show');
+
         // --- JSON (API) ---
         $router->get('/index_users.json', fn () => response()->json(
             $m['user']::query()->limit(100)->get()->toArray()
@@ -191,6 +198,25 @@ final class PipelineHarness
             'sort' => request()->input('sort', 'id'),
             'dir' => request()->input('dir', 'asc'),
             'q' => request()->input('q'),
+        ]));
+
+        // --- API Resource: route() in a per-row serialization loop — the shape the URL tier
+        // targets. 100 users with their posts → a self link per user + a link per post
+        // (~900 route() calls/response), the link-heavy `$this->collection` payload. ---
+        $router->get('/api_resource.json', fn () => response()->json(
+            $m['user']::with('posts')->limit(100)->get()->map(function ($u) {
+                $data = $u->toArray();
+                $data['links'] = ['self' => route('api.users.show', $u)];
+                $data['posts'] = array_map(fn ($p) => [
+                    'title' => $p->title,
+                    'link' => route('api.posts.show', $p),
+                ], $u->posts->all());
+
+                return $data;
+            })->all()
+        ));
+        $router->get('/api_resource.blade', fn () => view('pipeline_resource', [
+            'rows' => $m['user']::with('posts')->limit(100)->get(),
         ]));
     }
 
@@ -318,6 +344,12 @@ final class PipelineHarness
         file_put_contents($views.'/pipeline_filtered.blade.php',
             "<h1>sort={{ \$sort }} {{ \$dir }} · page {{ \$page }} · q={{ \$q }}</h1>\n".
             "@foreach (\$rows as \$r)<x-row :a=\"\$r->name\" :b=\"\$r->email\" :c=\"\$r->score\" :d=\"\$r->age\" data-id=\"{{ \$r->id }}\" />\n@endforeach\n"
+        );
+
+        // API-Resource page: a route() link per user and per post — route() in a render loop.
+        file_put_contents($views.'/pipeline_resource.blade.php',
+            "@foreach (\$rows as \$r)<a href=\"{{ route('api.users.show', \$r) }}\">{{ \$r->name }}</a>".
+            "@foreach (\$r->posts as \$p)<a href=\"{{ route('api.posts.show', \$p) }}\">{{ \$p->title }}</a>@endforeach\n@endforeach\n"
         );
 
         self::$viewsWritten = true;

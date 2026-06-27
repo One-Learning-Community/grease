@@ -60,6 +60,11 @@ class StackPipelineBench
         $this->serve(5);
     }
 
+    public function benchL6Url(): void
+    {
+        $this->serve(6);
+    }
+
     private function serve(int $level): void
     {
         $app = self::$apps[$level] ??= PipelineHarness::bootLevel($level);

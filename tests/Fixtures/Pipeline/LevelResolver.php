@@ -4,6 +4,7 @@ namespace Grease\Tests\Fixtures\Pipeline;
 
 use Grease\Container\Application as GreasedApplication;
 use Grease\Events\GreaseEventServiceProvider;
+use Grease\Routing\GreaseRoutingServiceProvider;
 use Grease\View\GreaseViewServiceProvider;
 use Illuminate\Foundation\Application as VanillaApplication;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
@@ -17,6 +18,7 @@ use Orchestra\Testbench\Foundation\Application as TestbenchResolver;
  *   >= 2  greased event dispatcher (provider)
  *   >= 3  greased Blade view tier (provider)
  *   >= 4  greased container (Application subclass)
+ *   >= 6  greased URL generator (provider rebinds the lazily-resolved `url` singleton)
  *
  * Levels 0/1 (vanilla / +models) differ only in which model classes the routes use, which
  * is the harness's concern, not the container's.
@@ -38,6 +40,9 @@ final class LevelResolver extends TestbenchResolver
         }
         if (self::$level >= 3) {
             $providers[] = GreaseViewServiceProvider::class;
+        }
+        if (self::$level >= 6) {
+            $providers[] = GreaseRoutingServiceProvider::class;
         }
 
         return (new ApplicationBuilder(new $appClass($this->getApplicationBasePath())))
