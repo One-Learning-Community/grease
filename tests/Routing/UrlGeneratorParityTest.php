@@ -31,6 +31,7 @@ class UrlGeneratorParityTest extends TestCase
         'root' => '/',                                       // root
         'posts.optional' => 'api/posts/{post}/{slug?}',      // optional → defer
         'posts.scoped' => 'api/posts/{post:slug}',           // scoped binding → defer
+        'posts.dup' => 'api/dup/{a}/{a}',                    // duplicate param name → defer (vanilla throws)
         'admin.dash' => 'dashboard',                         // for a domain variant below
     ];
 
@@ -136,6 +137,39 @@ class UrlGeneratorParityTest extends TestCase
         $greased->route('posts.show', [], true);
     }
 
+    /**
+     * Values vanilla treats as a *missing* parameter (an empty string, which it leaves as a
+     * literal `{name}`) and malformed duplicate-name routes must throw `UrlGenerationException`
+     * just like vanilla — the fast path must NOT silently build a URL. Regression for two
+     * byte-identity divergences caught in review.
+     */
+    public function test_empty_string_and_duplicate_param_throw_like_vanilla(): void
+    {
+        [$vanilla, $greased] = $this->generators();
+
+        $cases = [
+            'empty named value' => ['posts.show', ['post' => '']],
+            'empty mid-segment' => ['posts.comments', ['post' => '', 'comment' => 5]],
+            'duplicate param positional' => ['posts.dup', [5, 6]],
+        ];
+
+        foreach ($cases as $label => [$name, $params]) {
+            $this->assertTrue($this->throws($vanilla, $name, $params), "sanity: vanilla throws for $label");
+            $this->assertTrue($this->throws($greased, $name, $params), "greased must throw like vanilla for $label");
+        }
+    }
+
+    private function throws(VanillaUrlGenerator $url, string $name, $params): bool
+    {
+        try {
+            $url->route($name, $params);
+
+            return false;
+        } catch (UrlGenerationException) {
+            return true;
+        }
+    }
+
     public function test_prewarmed_index_matches_lazy(): void
     {
         [$vanilla, $greased] = $this->generators();
@@ -213,5 +247,28 @@ class UrlGeneratorParityTest extends TestCase
             $greased->route('posts.show', ['post' => 1], false),
             'subdir relative'
         );
+    }
+
+    /**
+     * forceRootUrl()/useOrigin() inject a root that may carry a *path* component
+     * (`https://example.com/app`) which a relative URL must keep — `/app/...`. Regression for a
+     * byte-identity divergence caught in review (the relative fast path now derives from the full
+     * absolute URI and strips exactly what vanilla strips, so the forced root path survives).
+     */
+    public function test_forced_root_url_with_path_matches(): void
+    {
+        foreach (['https://example.com/app', 'https://cdn.example.com'] as $root) {
+            [$vanilla, $greased] = $this->generators();
+            $vanilla->forceRootUrl($root);
+            $greased->forceRootUrl($root);
+
+            foreach ([true, false] as $absolute) {
+                $this->assertSame(
+                    $vanilla->route('posts.show', ['post' => 5], $absolute),
+                    $greased->route('posts.show', ['post' => 5], $absolute),
+                    "$root absolute=".var_export($absolute, true)
+                );
+            }
+        }
     }
 }

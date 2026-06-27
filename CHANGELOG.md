@@ -17,12 +17,15 @@ All notable changes to `grease` are documented here. The format is based on
   **−93% per call**, and because the assembly cost is fixed while the model tiers shrink everything
   else, **~−26% of an already-greased API-Resource response** (−84.7% full-stack on a 500-row ×
   ~5-link payload). Byte-identical to vanilla or it defers — domain routes, optional `{param?}` /
-  scoped `{param:field}` bindings, route-level defaults, extra params (query string), signed /
-  absolute-in-a-subdirectory URLs, and any `URL::defaults()` / `formatHostUsing()` /
-  `formatPathUsing()` customization all fall through to `parent::`. Absolute (the `route()` default)
-  and relative are both accelerated. Verified by `UrlGeneratorParityTest` (oracle = vanilla across
-  absolute/relative, every defer case, special-char encoding, the missing-param exception, secure
-  scheme, subdirectory apps, and prewarm-seed parity).
+  scoped `{param:field}` bindings, route-level defaults, duplicate parameter names, extra params
+  (query string), arity mismatches, empty-string / non-scalar values, signed URLs, and any
+  `URL::defaults()` / `formatHostUsing()` / `formatPathUsing()` customization all fall through to
+  `parent::`. Absolute (the `route()` default) and relative are both accelerated; the relative path
+  derives from the full absolute URI and strips exactly what vanilla strips, so a `forceRootUrl()` /
+  `useOrigin()` root path and a subdirectory base path are preserved. Verified by
+  `UrlGeneratorParityTest` (oracle = vanilla across absolute/relative, every defer case,
+  special-char encoding, the missing-param exception, secure scheme, subdirectory + forced-root
+  apps, and prewarm-seed parity).
 - **`Grease\Routing\GreaseRoutingServiceProvider` now swaps the `url` singleton** for the greased
   generator (no `bootstrap/app.php` edit — unlike the kernel-injected router, `url` is resolved
   lazily, so a provider rebind is in time; the framework's session/key resolvers and `routes`
@@ -30,7 +33,9 @@ All notable changes to `grease` are documented here. The format is based on
 - **`grease:route-cache` now also writes an opcache-interned URL shape index** (`name =>
   [segments, params]`) alongside the middleware index, via the same `greaseCompileEntry()` the lazy
   path uses, so a pre-seeded entry is byte-identical to one compiled on first `route()`. The
-  provider loads it under the same freshness check. The prewarm's payoff is FPM cold-build
+  provider loads it under the same freshness check, on a `booted` callback — after the framework's
+  cached-routes load (which rebinds `routes` → `setRoutes()` → flushes the index), so the seed
+  survives into requests rather than being wiped. The prewarm's payoff is FPM cold-build
   elimination (sub-ms, scales with route count) and Octane build-once-ever — not a per-response
   render win (the lazy index self-warms on first call); the −26% comes from the assembly collapse,
   which lands cold or warm.

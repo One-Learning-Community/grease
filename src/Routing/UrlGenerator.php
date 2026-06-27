@@ -133,6 +133,12 @@ class UrlGenerator extends BaseUrlGenerator
         $segments = preg_split('/\{[^}]+\}/', $uri);
         preg_match_all('/\{([^}]+)\}/', $uri, $matches);
 
+        // A duplicate parameter name is malformed: vanilla fills the first `{x}` and leaves the
+        // second in place, throwing. Never index it — let vanilla own that behaviour.
+        if (count($matches[1]) !== count(array_unique($matches[1]))) {
+            return false;
+        }
+
         return ['segments' => $segments, 'params' => $matches[1]];
     }
 
@@ -175,8 +181,10 @@ class UrlGenerator extends BaseUrlGenerator
                 $value = $value->getRouteKey();
             }
 
-            if (! is_string($value) && ! is_int($value)) {
-                return null; // null/bool/float/array have distinct vanilla semantics
+            if ((! is_string($value) && ! is_int($value)) || $value === '') {
+                // null/bool/float/array have distinct vanilla semantics; an empty string is a
+                // *missing* named parameter to vanilla (it leaves `{name}` in place and throws).
+                return null;
             }
 
             $path .= $value.$segments[$i + 1];
@@ -189,19 +197,23 @@ class UrlGenerator extends BaseUrlGenerator
 
         $dontEncode = $this->greaseDontEncode ??= $this->routeUrl()->dontEncode;
 
+        $scheme = $route->httpOnly() ? 'http://' : ($route->httpsOnly() ? 'https://' : $this->formatScheme());
+        $uri = strtr(rawurlencode(trim($this->formatRoot($scheme).'/'.trim($path, '/'), '/')), $dontEncode);
+
         if ($absolute) {
-            $scheme = $route->httpOnly() ? 'http://' : ($route->httpsOnly() ? 'https://' : $this->formatScheme());
-
-            return strtr(rawurlencode(trim($this->formatRoot($scheme).'/'.trim($path, '/'), '/')), $dontEncode);
+            return $uri;
         }
 
-        // Relative: vanilla strips the root and the request base path. The simple form below is
-        // byte-identical only at the document root; a subdirectory app defers.
-        if ($this->request->getBaseUrl() !== '') {
-            return null;
+        // Relative: build the absolute URI (so a forced root path from forceRootUrl()/useOrigin()
+        // is included), then strip scheme+host and the request base path — a verbatim copy of
+        // RouteUrlGenerator::to()'s relative tail, byte-identical for every root shape.
+        $uri = preg_replace('#^(//|[^/?])+#', '', $uri);
+
+        if ($base = $this->request->getBaseUrl()) {
+            $uri = preg_replace('#^'.$base.'#i', '', $uri);
         }
 
-        return '/'.ltrim(strtr(rawurlencode($path), $dontEncode), '/');
+        return '/'.ltrim($uri, '/');
     }
 
     /**

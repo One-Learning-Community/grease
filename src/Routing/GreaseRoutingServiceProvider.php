@@ -56,7 +56,16 @@ class GreaseRoutingServiceProvider extends ServiceProvider
         }
 
         $this->loadMiddlewareIndex();
-        $this->loadUrlIndex();
+
+        // Seed the URL index on a `booted` callback, NOT here. A cached-routes load
+        // (`RouteServiceProvider`'s own booted callback) re-binds `routes`, firing the
+        // framework's `rebinding('routes')` → `UrlGenerator::setRoutes()`, which flushes the
+        // index. That runs in the booted phase, strictly after every provider's `boot()` — so a
+        // seed here would be wiped. Registered now (after `RouteServiceProvider::boot()` queued
+        // its callback), this fires after the route load, so the seed survives into requests.
+        // The middleware index has no such hazard: `setCompiledRoutes()` swaps the route
+        // collection without touching the router's resolved-middleware cache.
+        $this->app->booted(fn () => $this->loadUrlIndex());
     }
 
     /**

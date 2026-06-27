@@ -8,7 +8,9 @@ use Grease\Routing\UrlGenerator as GreasedUrlGenerator;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
+use Illuminate\Http\Request;
 use Orchestra\Testbench\TestCase as Orchestra;
+use ReflectionMethod;
 use ReflectionProperty;
 
 /**
@@ -92,7 +94,7 @@ class GreaseRoutingServiceProviderTest extends Orchestra
         $signed = $url->signedRoute('things.show', ['id' => 5]);
         $this->assertStringContainsString('signature=', $signed);
 
-        $request = \Illuminate\Http\Request::create($signed);
+        $request = Request::create($signed);
         $this->assertTrue($url->hasValidSignature($request));
     }
 
@@ -119,6 +121,44 @@ class GreaseRoutingServiceProviderTest extends Orchestra
         $index = (new ReflectionProperty(GreasedUrlGenerator::class, 'greaseRouteUrlIndex'))->getValue($url);
         $this->assertArrayHasKey('things.show', $index);
         $this->assertSame(['segments' => ['things/', ''], 'params' => ['id']], $index['things.show']);
+
+        @unlink($path);
+        @unlink($routesCache);
+    }
+
+    /**
+     * The hazard the booted-callback seeding guards against: a cached-routes load re-binds
+     * `routes`, firing the framework's `rebinding('routes')` → `UrlGenerator::setRoutes()`, which
+     * flushes the URL index. Seeding in `boot()` would be wiped by that later booted-phase load;
+     * the provider instead seeds on a `booted` callback (after the route load), so loading the
+     * index AFTER a `setRoutes()` flush correctly repopulates it. Regression for a prewarm bug
+     * caught in review.
+     */
+    public function test_url_index_seed_survives_a_routes_rebind(): void
+    {
+        $url = $this->app->make('url');
+
+        $path = GreaseRoutingServiceProvider::urlIndexPath($this->app);
+        $routesCache = $this->app->getCachedRoutesPath();
+        @mkdir(dirname($path), 0777, true);
+        file_put_contents($routesCache, '<?php return [];'.PHP_EOL);
+        touch($routesCache, time() - 10);
+        $entries = ['things.show' => ['segments' => ['things/', ''], 'params' => ['id']]];
+        file_put_contents($path, '<?php return '.var_export($entries, true).';'.PHP_EOL);
+        touch($path, time());
+
+        $indexProp = new ReflectionProperty(GreasedUrlGenerator::class, 'greaseRouteUrlIndex');
+
+        // A boot()-time seed would be wiped here: the compiled-routes load rebinds 'routes'.
+        $url->useGreaseRouteUrlIndex($entries);
+        $url->setRoutes($this->app['router']->getRoutes());
+        $this->assertSame([], $indexProp->getValue($url), 'sanity: a routes rebind flushes the index');
+
+        // The provider seeds on app->booted(), which fires AFTER that load — replay its body.
+        (new ReflectionMethod(GreaseRoutingServiceProvider::class, 'loadUrlIndex'))
+            ->invoke(new GreaseRoutingServiceProvider($this->app));
+
+        $this->assertArrayHasKey('things.show', $indexProp->getValue($url), 'seed must land after the route load');
 
         @unlink($path);
         @unlink($routesCache);

@@ -47,7 +47,9 @@ result is provably the exact string vanilla would build. Anything else falls str
 - a route with a **domain** (it assembles a host),
 - an **optional** `{param?}` or **scoped** `{param:field}` binding (different replacement
   semantics),
-- a route carrying its own **`$defaults`**.
+- a route carrying its own **`$defaults`**,
+- a **duplicate parameter name** (`{a}/{a}`) — malformed; vanilla fills the first and throws on
+  the second.
 
 **Not fast-pathable** (decided per call):
 
@@ -55,6 +57,8 @@ result is provably the exact string vanilla would build. Anything else falls str
 - an **arity mismatch** — too few is vanilla's `UrlGenerationException`, which must still throw,
 - a **non-scalar** value (after `UrlRoutable::getRouteKey()`) — `null`/`bool`/`float`/array have
   distinct vanilla semantics,
+- an **empty-string** value — vanilla treats it as a *missing* parameter (leaves `{name}` literal)
+  and throws,
 - a value that would inject a literal `{…}` — vanilla treats that as a missing parameter and throws,
 - a **subdirectory app** for a *relative* URL (non-empty `Request::getBaseUrl()`),
 - any **`URL::defaults()`**, **`formatHostUsing()`**, or **`formatPathUsing()`** customization in
