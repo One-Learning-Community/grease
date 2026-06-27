@@ -32,6 +32,13 @@ namespace Grease\Concerns;
  * gain (the dominant `where`/`orWhere` verbs bypass `__call` entirely). That reach
  * isn't worth a default — add `use HasGreasedQueries;` explicitly on a model only if
  * you're chasing every last cycle (e.g. a query-construction-heavy admin/reporting path).
+ *
+ * Also NOT bundled: `HasGreasedDecimalCasts` (the `decimal:N` Brick\Math identity
+ * short-circuit). It's byte-identical and heavily fuzzed, but `decimal` usually means money,
+ * so it's left as a separate, explicit opt-in you can audit and roll back in isolation — add
+ * `use HasGreasedDecimalCasts;` on a model deliberately. The win lands on drivers that return
+ * canonical decimal strings (MySQL/PostgreSQL); on SQLite (floats) it defers, byte-identical,
+ * with no speedup.
  */
 trait HasGrease
 {
