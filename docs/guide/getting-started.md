@@ -12,22 +12,14 @@ adds **zero** cost to anything that doesn't opt in.
 
 Grease is a menu, not a monolith. Each tier is an independent opt-in that removes the same
 kind of waste — a stable fact Laravel recomputes per row, per render, per request, or per
-query. Take the ones whose hot paths you actually run; the model trait is just the simplest.
+query. Take the ones whose hot paths you actually run; none are auto-discovered.
 
-| Tier | How you opt in | What it speeds up |
-|---|---|---|
-| **Model** | `use HasGrease;` | hydration, casting, serialization, dirty-check, m2m pivots |
-| **Builder dispatch** (opt-in, not in `HasGrease`) | `use HasGreasedQueries;` | Eloquent builder `__call` resolution per query verb |
-| [**Events**](/guide/events) | `GreaseEventServiceProvider` | every dispatch, app-wide |
-| [**Blade**](/guide/blade) | `GreaseViewServiceProvider` | `@props` + attribute-merge per component |
-| [**View cache**](/guide/view-cache) | same provider + `grease:view-cache` | view name→path resolution |
-| [**Config**](/guide/config) | `GreaseConfigServiceProvider` (+ `grease:config-cache`) | `config()` reads |
-| [**Validation**](/guide/validation) | `GreaseValidationServiceProvider` | rule parsing per validation |
-| [**Container**](/guide/container) | `Grease\Container\Application` in `bootstrap/app.php` | constructor reflection per resolve |
-| [**Request**](/guide/request) | `Grease\Http\Request::capture()` in `public/index.php` | `input()` / `all()` per access |
-| [**Router**](/guide/routing) | `Grease\Routing\Router::swap($app)` (+ `GreaseRoutingServiceProvider` + `grease:route-cache`) | middleware resolve + sort |
+**The no-brainers:** add `HasGrease` to your models, and `HasGreasedAcyclicSerialization` too
+unless your models are self-referential trees — both are trivial, byte-identical, and carry the
+broadest wins.
 
-Everything below walks each one. None are auto-discovered — opting in is always deliberate.
+👉 **See [Tiers at a Glance](/guide/tiers)** for the full menu — every tier with how to enable
+it, what (if anything) you're promising, and its expected gain.
 
 ## Install
 

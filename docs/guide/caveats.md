@@ -120,6 +120,20 @@ because `decimal` usually means money. Two things to know if you reach for it:
   does nothing for a model with no `decimal` casts — it's a narrow tier for decimal-dense financial
   models, not a default.
 
+### The acyclic-serialization trait (`HasGreasedAcyclicSerialization`) has one real responsibility
+
+This trait drops Eloquent's circular-reference guard from `toArray`/`getQueueableRelations`/
+`touchOwners`/`push` — [the only Grease tier that asks something of you in return](/guide/acyclic-serialization):
+
+- **It is byte-identical for acyclic data.** The guard only ever changes output when a method
+  re-enters the *same object* — a cycle. With no cycle it is pure overhead, so removing it returns
+  exactly what vanilla returns.
+- **A cyclic graph is unsupported and will recurse until the stack overflows.** There is no guard
+  left to break the loop — that is the entire point of the opt-in. Leave it **off** self-referential
+  tree models (adjacency lists with `parent`+`children` eager-loaded), polymorphic graphs that can
+  point back, or anywhere you wire relations into a loop by hand. When unsure, don't add it; the
+  guard stays, byte-identical and safe.
+
 ## The foundation tiers (container, request, config, router & view index)
 
 These are a *different axis* from the model traits, with their own opt-in — see

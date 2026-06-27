@@ -8,6 +8,29 @@ All notable changes to `grease` are documented here. The format is based on
 
 ### Added
 
+- **Acyclic serialization opt-out (`Grease\Concerns\HasGreasedAcyclicSerialization`) — a
+  standalone, per-model opt-in.** Eloquent wraps four methods — `toArray()`,
+  `getQueueableRelations()`, `touchOwners()`, `push()` — in a circular-reference guard that runs
+  `debug_backtrace(DEBUG_BACKTRACE_PROVIDE_OBJECT, 2)` (via `Onceable::hashFromTrace`) plus a
+  `WeakMap` on **every** call, to survive a self-referential object graph — a shape ordinary
+  eager loading can't even produce (`User::with('posts.user')` yields a fresh `User` per post,
+  not the original object back). All four route through `$this->withoutRecursion()`, so one
+  override drops the tax everywhere for a model that promises an acyclic graph. **Byte-identical
+  for acyclic data** — the guard only changes output when a method re-enters the same object (a
+  cycle), so with no cycle it is pure overhead; proven against vanilla across relation-less /
+  belongsTo / hasMany / deep-nested / belongsToMany-pivot / hidden / null shapes, for both
+  `toArray()` and `getQueueableRelations()`, on plain + `HasGrease` + composed models
+  (`HasGreasedAcyclicSerializationParityTest`). The opt-in's one responsibility: a model that
+  *does* have a cyclic graph will recurse until the stack overflows — so leave it off
+  self-referential tree models (adjacency lists with `parent`+`children` eager-loaded). Win is
+  **~1,230 ns per relation-bearing model** (one `debug_backtrace`) → on greased models, Linux +
+  JIT (`benchmarks/acyclic_ab.php`): belongsTo −35%, deep(3) −43.6%, belongsToMany(5) −26.8%,
+  and **−36% on a 100-row `with()` list response** — the most common API shape. ~0 on
+  relation-less models (already short-circuited) and on a lone huge child collection (one parent
+  guard amortized). **Deliberately NOT bundled into `HasGrease`/`GreasedModel`** — acyclicity is
+  a promise only the app author can make (the `HasGreasedDecimalCasts` precedent). New docs page
+  + a "Tiers at a Glance" menu page ranking every tier by effort / risk / gain.
+
 - **Decimal-cast identity short-circuit (`Grease\Concerns\HasGreasedDecimalCasts`) — a standalone,
   per-model opt-in.** Vanilla casts every `decimal:N` value through Brick\Math
   (`BigDecimal::of($v)->toScale($N, HalfUp)`), per cast per row, on every read. When the stored
