@@ -46,7 +46,7 @@ $oracleModel = new class extends Model
 $oracle = function ($v, int $n) use ($oracleModel): array {
     try {
         return [true, $oracleModel->pub($v, $n)]; // [ok, result]
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         return [false, null]; // Brick threw (vanilla would throw too)
     }
 };
