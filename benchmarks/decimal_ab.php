@@ -20,47 +20,53 @@
 
 require __DIR__.'/../vendor/autoload.php';
 
+use Grease\Bench\Support\BootsEloquent;
 use Grease\Concerns\HasGreasedDecimalCasts;
 use Illuminate\Database\Eloquent\Model;
 
 $rows = (int) ($argv[1] ?? 100);
-$iters = (int) ($argv[2] ?? 3000);
+$iters = (int) ($argv[2] ?? 400);
+
+// A REALISTIC model: ONE decimal:2 among the usual cast mix (int/bool/decimal/array/datetime)
+// plus plain columns — not a contrived all-decimal row. Boot a connection so the datetime cast
+// can resolve getDateFormat (no tables are created; rows are hydrated literally).
+BootsEloquent::capsule();
 
 // IMPORTANT — the fast path only fires when the driver returns a canonical decimal STRING.
 // MySQL (DECIMAL) and PostgreSQL (NUMERIC) both do — that's where money lives. SQLite returns
 // `decimal` columns as a float, so the fast path defers there (byte-identical, just no win) —
-// which is why a SQLite-backed bench would understate this to ~0. We therefore hydrate from
-// canonical strings directly (the MySQL/PG return shape), NOT through SQLite. Correctness is
-// driver-independent (proven in the parity suite); only the WIN is driver-dependent.
+// which is why a SQLite-backed bench reads ~0. We hydrate from canonical strings directly (the
+// MySQL/PG return shape). Correctness is driver-independent; only the WIN is driver-dependent.
 $raw = [];
 for ($i = 1; $i <= $rows; $i++) {
     $raw[] = [
         'id' => $i,
-        'ref' => "INV-$i",
-        'price' => number_format(($i % 1000) + ($i % 100) / 100, 2, '.', ''),
-        'tax' => number_format(($i % 50) + 0.50, 2, '.', ''),
-        'total' => number_format(($i % 1000) + ($i % 50) + 0.99, 2, '.', ''),
+        'name' => "User $i",
+        'email' => "user$i@example.test",
+        'age' => (string) (18 + $i % 60),
+        'is_active' => (string) ($i % 2),
+        'score' => number_format(($i % 1000) + ($i % 100) / 100, 2, '.', ''), // the one decimal
+        'settings' => '{"theme":"dark"}',
+        'email_verified_at' => '2026-01-01 00:00:00',
+        'created_at' => '2026-01-01 00:00:00',
+        'updated_at' => '2026-01-01 00:00:00',
     ];
 }
 
 class VanillaInvoice extends Model
 {
-    public $timestamps = false;
+    protected $table = 'users';
 
-    protected $table = 'invoices';
-
-    protected $casts = ['price' => 'decimal:2', 'tax' => 'decimal:2', 'total' => 'decimal:2'];
+    protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
 }
 
 class GreasedInvoice extends Model
 {
     use HasGreasedDecimalCasts;
 
-    public $timestamps = false;
+    protected $table = 'users';
 
-    protected $table = 'invoices';
-
-    protected $casts = ['price' => 'decimal:2', 'tax' => 'decimal:2', 'total' => 'decimal:2'];
+    protected $casts = ['age' => 'integer', 'is_active' => 'boolean', 'score' => 'decimal:2', 'settings' => 'array', 'email_verified_at' => 'datetime'];
 }
 
 // --- Parity gate: every row byte-identical before we time anything. ---
@@ -70,7 +76,7 @@ if (json_encode($probeV) !== json_encode($probeG)) {
     fwrite(STDERR, "PARITY FAIL — greased toArray differs from vanilla. Refusing to time.\n");
     exit(1);
 }
-echo "Parity: OK — $rows rows byte-identical (3 decimal:2 columns each, canonical-string source = MySQL/PG shape).\n";
+echo "Parity: OK — $rows rows byte-identical (1 decimal:2 among int/bool/array/datetime casts, canonical-string source = MySQL/PG shape).\n";
 
 // Each timed iteration hydrates FRESH instances via newFromBuilder — the real-request shape (a
 // request hydrates new models, so the decimal cast is paid every time, not served from a reused
