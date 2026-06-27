@@ -150,8 +150,12 @@ Grease\Routing\GreaseRoutingServiceProvider::class,
 ```
 
 ```bash
-php artisan grease:route-cache   # route:cache + the opcache-interned middleware index
+php artisan grease:route-cache   # route:cache + the middleware index + the URL shape index
 ```
+
+The same provider also enables a second routing tier — the greased
+[URL generator](/guide/url-generator), which fast-paths `route()` — and `grease:route-cache` writes
+its shape index in the same pass. No extra opt-in: register the provider and both tiers are live.
 
 Run it **last** in your deploy (it runs `route:cache` itself), so a later plain `route:cache` doesn't
 shadow it — or skip the manual step and run `php artisan optimize`, which now runs `grease:route-cache`

@@ -78,7 +78,8 @@ deploy needs no grease-specific step.
 
 See [The Container](https://one-learning-community.github.io/grease/guide/container),
 [The Request](https://one-learning-community.github.io/grease/guide/request),
-[The Router](https://one-learning-community.github.io/grease/guide/routing), and
+[The Router](https://one-learning-community.github.io/grease/guide/routing),
+[The URL Generator](https://one-learning-community.github.io/grease/guide/url-generator), and
 [The View Cache](https://one-learning-community.github.io/grease/guide/view-cache).
 
 ## What you get
@@ -128,7 +129,7 @@ composer bench    # phpbench per-op A/B + the SQL suite
 - **[How It Works](https://one-learning-community.github.io/grease/guide/how-it-works)** — the per-class blueprint and each tier
 - **[Benchmarks](https://one-learning-community.github.io/grease/guide/benchmarks)** — full numbers, methodology, and reproducing them on your build
 - **[The Method](https://one-learning-community.github.io/grease/guide/method)** — how a win is found and proven (and how the dead ends got rejected)
-- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** · **[Validation](https://one-learning-community.github.io/grease/guide/validation)** · **[The Router](https://one-learning-community.github.io/grease/guide/routing)** · **[The View Cache](https://one-learning-community.github.io/grease/guide/view-cache)** — the beyond-Eloquent tiers
+- **[The Event Dispatcher](https://one-learning-community.github.io/grease/guide/events)** · **[Blade Components](https://one-learning-community.github.io/grease/guide/blade)** · **[The Container](https://one-learning-community.github.io/grease/guide/container)** · **[The Request](https://one-learning-community.github.io/grease/guide/request)** · **[The Config Repository](https://one-learning-community.github.io/grease/guide/config)** · **[Validation](https://one-learning-community.github.io/grease/guide/validation)** · **[The Router](https://one-learning-community.github.io/grease/guide/routing)** · **[The URL Generator](https://one-learning-community.github.io/grease/guide/url-generator)** · **[The View Cache](https://one-learning-community.github.io/grease/guide/view-cache)** — the beyond-Eloquent tiers
 - **[Caveats & Narrowing](https://one-learning-community.github.io/grease/guide/caveats)** — the two small, obscure things that change
 
 ## Requirements
