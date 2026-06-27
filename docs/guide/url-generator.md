@@ -6,15 +6,9 @@ row: 500 rows with two or three links each is 1,000–1,500 URL builds in one pa
 repeated string assembly for a URI shape that never changes. This tier replays that shape from a
 cache instead.
 
-## It is not the Symfony route compiler
+## Where the cost is
 
-The first thing to clear up, because the obvious assumption is wrong: `route()` does **not** re-run
-Symfony's `RouteCompiler`. A route compiles once — `Route::$compiled` is memoized and is persisted
-through `route:cache` (`prepareForSerialization()` forces the compile at cache-build time), so at
-request time the compile never runs. An Excimer profile of a tight `route()` loop confirms it:
-`RouteCompiler::compile` is **0%** of the cost.
-
-What actually costs the microseconds is the per-call **assembly** in `RouteUrlGenerator::to()`:
+What costs the microseconds is the per-call **assembly** in `RouteUrlGenerator::to()`:
 `formatParameters` → `replaceRouteParameters` → `replaceNamedParameters` → `addQueryString`, plus
 the optional-parameter walk and a thick `Arr`/`Collection` layer underneath. That pipeline runs in
 full on every `route()` call.
