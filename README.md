@@ -64,7 +64,11 @@ Grease\Routing\Router::swap($app);
 
 The router additionally has an eager, opcache-interned middleware index — register
 `Grease\Routing\GreaseRoutingServiceProvider::class` and deploy with `php artisan grease:route-cache`
-(a `route:cache` twin) to make FPM middleware resolution ~free. The view tier has the same: deploy
+(a `route:cache` twin) to make FPM middleware resolution ~free. That same provider also swaps in a
+greased **URL generator** (no app-entry edit needed — `url` is resolved lazily): `route()` replays a
+cached per-name `[segments, params]` shape instead of re-running the full assembly pipeline every
+call, and `grease:route-cache` pre-seeds that shape index too. Byte-identical or it defers. The view
+tier has the same: deploy
 with `php artisan grease:view-cache` (a `view:cache` twin) and view resolution becomes an
 opcache-interned lookup — no per-render filesystem stat-walk.
 
@@ -92,6 +96,7 @@ Representative deltas, measured on Linux ([reproduce on your own build](https://
 - **Config** (`config()` reads, app-wide): a memoized read path (`−65%` on a repeat-heavy mix), and an opcache-interned flat index via `grease:config-cache` that cuts `~88%` of config-read time — a per-request win that scales with how many reads your app makes (real apps make thousands).
 - **Foundation tiers** (container & request, app-entry opt-in): −38.8% per container resolve, −41% per input-heavy request. Layered with everything above, a real mixed page-load (JSON + Blade) request suite stacks to **~−47% end-to-end** for **~+2% retained memory** — see the [cumulative-stack table](https://one-learning-community.github.io/grease/guide/benchmarks#the-whole-stack-compounding).
 - **Router** (middleware resolve+sort, app-entry opt-in): once-per-request work, so small in isolation — but pure waste removed on every request. The lazy cache halves it; the eager `grease:route-cache` index takes it to ~−96% (FPM ≈ Octane steady-state). Compounds with request volume.
+- **URL generator** (`route()` assembly, provider opt-in): **−93% per `route()` call** — a cached per-name shape replayed as a concat, skipping the formatParameters/replace/query pipeline (the Symfony compile is already cached, so it was never the cost). A thin slice of a vanilla response, but a *compounding* one: on an API-Resource payload where the model tiers already shrank everything else, it's **~−26% of the response** (500 rows × ~5 absolute links → −84.7% full-stack vs vanilla). Byte-identical; domain / optional / scoped / query-string / signed URLs defer to vanilla.
 - **View cache** (`grease:view-cache`, provider opt-in): the resolution `view:cache` throws away. An opcache-interned name→path index turns each view lookup from a filesystem stat-walk into an array hit (20 views: 0 `file_exists` calls vs 20), and permanently kills the never-memoized dynamic-view miss — even under Octane.
 
 These are `:memory:`/Linux figures — read them as Grease's share of the work, not your p99,

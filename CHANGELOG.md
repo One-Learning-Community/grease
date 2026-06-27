@@ -6,6 +6,35 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **Greased URL generator (`Grease\Routing\UrlGenerator`) — an eager-index fast path for
+  `route()`.** Vanilla re-runs the full `RouteUrlGenerator::to()` assembly (formatParameters /
+  replaceRouteParameters / replaceNamedParameters / addQueryString / the optional-param walk, over
+  a thick `Arr`/`Collection` layer) on every call — none of which is the Symfony route compile
+  (that's cached on `Route::$compiled` and persisted through `route:cache`). The tier caches each
+  route's class-pure `[segments, params]` shape (lazily, or pre-seeded) and replays it as a concat:
+  **−93% per call**, and because the assembly cost is fixed while the model tiers shrink everything
+  else, **~−26% of an already-greased API-Resource response** (−84.7% full-stack on a 500-row ×
+  ~5-link payload). Byte-identical to vanilla or it defers — domain routes, optional `{param?}` /
+  scoped `{param:field}` bindings, route-level defaults, extra params (query string), signed /
+  absolute-in-a-subdirectory URLs, and any `URL::defaults()` / `formatHostUsing()` /
+  `formatPathUsing()` customization all fall through to `parent::`. Absolute (the `route()` default)
+  and relative are both accelerated. Verified by `UrlGeneratorParityTest` (oracle = vanilla across
+  absolute/relative, every defer case, special-char encoding, the missing-param exception, secure
+  scheme, subdirectory apps, and prewarm-seed parity).
+- **`Grease\Routing\GreaseRoutingServiceProvider` now swaps the `url` singleton** for the greased
+  generator (no `bootstrap/app.php` edit — unlike the kernel-injected router, `url` is resolved
+  lazily, so a provider rebind is in time; the framework's session/key resolvers and `routes`
+  rebinding survive it, so signed URLs and route-cache rebinding are unchanged).
+- **`grease:route-cache` now also writes an opcache-interned URL shape index** (`name =>
+  [segments, params]`) alongside the middleware index, via the same `greaseCompileEntry()` the lazy
+  path uses, so a pre-seeded entry is byte-identical to one compiled on first `route()`. The
+  provider loads it under the same freshness check. The prewarm's payoff is FPM cold-build
+  elimination (sub-ms, scales with route count) and Octane build-once-ever — not a per-response
+  render win (the lazy index self-warms on first call); the −26% comes from the assembly collapse,
+  which lands cold or warm.
+
 ## [0.6.1] - 2026-06-25
 
 ### Added

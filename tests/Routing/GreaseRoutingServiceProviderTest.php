@@ -4,6 +4,7 @@ namespace Grease\Tests\Routing;
 
 use Grease\Routing\GreaseRoutingServiceProvider;
 use Grease\Routing\Router as GreasedRouter;
+use Grease\Routing\UrlGenerator as GreasedUrlGenerator;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\ApplicationBuilder;
@@ -69,6 +70,55 @@ class GreaseRoutingServiceProviderTest extends Orchestra
         $cache = (new ReflectionProperty(GreasedRouter::class, 'greaseResolvedMiddleware'))->getValue($router);
         $this->assertArrayHasKey($key, $cache);
         $this->assertSame(['App\\Mw\\A', 'App\\Mw\\B'], $cache[$key]);
+
+        @unlink($path);
+        @unlink($routesCache);
+    }
+
+    public function test_url_generator_is_greased_and_still_signs(): void
+    {
+        $this->app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('g', 32)));
+
+        $url = $this->app->make('url');
+        $this->assertInstanceOf(GreasedUrlGenerator::class, $url);
+
+        $this->app['router']->get('/things/{id}', ['as' => 'things.show', fn () => '']);
+
+        // Fast path produces an ordinary absolute URL.
+        $this->assertSame('http://localhost/things/5', $url->route('things.show', ['id' => 5]));
+
+        // Signed URLs prove the framework's key resolver survived the singleton rebind — and a
+        // signed URL takes vanilla's path (query string), so it must validate end-to-end.
+        $signed = $url->signedRoute('things.show', ['id' => 5]);
+        $this->assertStringContainsString('signature=', $signed);
+
+        $request = \Illuminate\Http\Request::create($signed);
+        $this->assertTrue($url->hasValidSignature($request));
+    }
+
+    public function test_url_index_round_trips_and_seeds_the_generator(): void
+    {
+        $url = $this->app->make('url');
+
+        $path = GreaseRoutingServiceProvider::urlIndexPath($this->app);
+        $routesCache = $this->app->getCachedRoutesPath();
+        @mkdir(dirname($path), 0777, true);
+
+        file_put_contents($routesCache, '<?php return [];'.PHP_EOL);
+        touch($routesCache, time() - 10);
+
+        // The command's exact var_export shape: name => [segments, params].
+        $entries = ['things.show' => ['segments' => ['things/', ''], 'params' => ['id']]];
+        file_put_contents($path, '<?php return '.var_export($entries, true).';'.PHP_EOL);
+        touch($path, time());
+
+        $this->assertTrue(GreaseRoutingServiceProvider::indexIsFresh($path, $this->app));
+
+        $url->useGreaseRouteUrlIndex(require $path);
+
+        $index = (new ReflectionProperty(GreasedUrlGenerator::class, 'greaseRouteUrlIndex'))->getValue($url);
+        $this->assertArrayHasKey('things.show', $index);
+        $this->assertSame(['segments' => ['things/', ''], 'params' => ['id']], $index['things.show']);
 
         @unlink($path);
         @unlink($routesCache);

@@ -33,12 +33,14 @@ class RouteMiddlewareCacheCommand extends Command
 
     public function handle(): int
     {
-        // Build the index from a fresh, UNCACHED app so getRoutes() yields the full collection.
+        // Build the indexes from a fresh, UNCACHED app so getRoutes() yields the full collection.
         $this->callSilent('route:clear');
 
-        ['index' => $index, 'skipped' => $skipped] = $this->buildIndex();
+        $app = $this->freshApplication();
+        ['index' => $index, 'skipped' => $skipped] = $this->buildIndex($app);
+        $urlIndex = $this->buildUrlIndex($app);
 
-        // Now write the route cache (its own fresh boot), then the index LAST so its mtime is
+        // Now write the route cache (its own fresh boot), then the indexes LAST so their mtime is
         // >= the route cache's — which the provider's freshness check relies on.
         $exit = $this->call('route:cache');
         if ($exit !== self::SUCCESS) {
@@ -50,11 +52,16 @@ class RouteMiddlewareCacheCommand extends Command
             '<?php return '.var_export($index, true).';'.PHP_EOL
         );
 
+        file_put_contents(
+            GreaseRoutingServiceProvider::urlIndexPath($this->laravel),
+            '<?php return '.var_export($urlIndex, true).';'.PHP_EOL
+        );
+
         if ($skipped > 0) {
             $this->warn("$skipped route signature(s) skipped (closure middleware — no stable key); those resolve live.");
         }
 
-        $this->components->info('Greased route-middleware index cached ('.count($index).' signatures).');
+        $this->components->info('Greased route indexes cached ('.count($index).' middleware signatures, '.count($urlIndex).' URL shapes).');
 
         return self::SUCCESS;
     }
@@ -64,9 +71,8 @@ class RouteMiddlewareCacheCommand extends Command
      *
      * @return array{index: array<string, array>, skipped: int}
      */
-    protected function buildIndex(): array
+    protected function buildIndex($app): array
     {
-        $app = $this->freshApplication();
         $router = $app['router'];
 
         $index = [];
@@ -100,6 +106,30 @@ class RouteMiddlewareCacheCommand extends Command
         }
 
         return ['index' => $index, 'skipped' => $skipped];
+    }
+
+    /**
+     * Enumerate every named route's static URL shape into a `name => [segments, params]` index,
+     * via the same {@see UrlGenerator::greaseCompileEntry()} the lazy path uses — so a seeded
+     * entry is byte-identical to one compiled on first `route()`. Routes the fast path cannot
+     * cover (domain / optional / scoped / route-defaults) compile to `false` and are omitted;
+     * those simply resolve through vanilla at runtime.
+     *
+     * @return array<string, array{segments: array<int, string>, params: array<int, string>}>
+     */
+    protected function buildUrlIndex($app): array
+    {
+        $index = [];
+
+        foreach ($app['router']->getRoutes()->getRoutesByName() as $name => $route) {
+            $entry = UrlGenerator::greaseCompileEntry($route);
+
+            if ($entry !== false) {
+                $index[$name] = $entry;
+            }
+        }
+
+        return $index;
     }
 
     /**

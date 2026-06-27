@@ -21,6 +21,30 @@ use Illuminate\Support\ServiceProvider;
  */
 class GreaseRoutingServiceProvider extends ServiceProvider
 {
+    /**
+     * Swap the `url` singleton for the greased {@see UrlGenerator}. Unlike the router (taken by
+     * the kernel via constructor injection, so it must be swapped in `bootstrap/app.php`), the
+     * URL generator is resolved lazily — a provider rebind is in time. The framework's
+     * `extend('url')` (session/key resolvers + the `routes` rebinding callback) survives a
+     * re-bind and still decorates this instance, so signed URLs and route-cache rebinding work
+     * unchanged. The closure mirrors the framework's `registerUrlGenerator()` verbatim except
+     * for the class instantiated.
+     */
+    public function register(): void
+    {
+        $this->app->singleton('url', function ($app) {
+            $routes = $app['router']->getRoutes();
+
+            $app->instance('routes', $routes);
+
+            return new UrlGenerator(
+                $routes, $app->rebinding('request', function ($app, $request) {
+                    $app['url']->setRequest($request);
+                }), $app['config']['app.asset_url']
+            );
+        });
+    }
+
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
@@ -32,6 +56,7 @@ class GreaseRoutingServiceProvider extends ServiceProvider
         }
 
         $this->loadMiddlewareIndex();
+        $this->loadUrlIndex();
     }
 
     /**
@@ -54,6 +79,31 @@ class GreaseRoutingServiceProvider extends ServiceProvider
 
         if (self::indexIsFresh($path, $this->app)) {
             $router->useGreaseRouteMiddlewareCache(require $path);
+        }
+    }
+
+    /**
+     * Seed the greased URL generator's per-name shape index from the eager artifact, when one is
+     * present and fresh. A no-op unless `url` was swapped for the greased class (always the case
+     * once this provider is registered). Without the index the tier still works — it just
+     * compiles each route's shape lazily on first `route()` instead of at deploy time.
+     */
+    protected function loadUrlIndex(): void
+    {
+        if (! method_exists($this->app, 'getCachedRoutesPath')) {
+            return;
+        }
+
+        $url = $this->app->make('url');
+
+        if (! $url instanceof UrlGenerator) {
+            return;
+        }
+
+        $path = self::urlIndexPath($this->app);
+
+        if (self::indexIsFresh($path, $this->app)) {
+            $url->useGreaseRouteUrlIndex(require $path);
         }
     }
 
@@ -93,5 +143,15 @@ class GreaseRoutingServiceProvider extends ServiceProvider
     public static function indexPath(Application $app): string
     {
         return dirname($app->getCachedRoutesPath()).'/grease_routes_mw.php';
+    }
+
+    /**
+     * The URL shape-index path — a sibling of the route cache, alongside the middleware index, so
+     * the same freshness check ({@see indexIsFresh()}) governs both. Shared by
+     * {@see RouteMiddlewareCacheCommand} (writer) and {@see loadUrlIndex()}.
+     */
+    public static function urlIndexPath(Application $app): string
+    {
+        return dirname($app->getCachedRoutesPath()).'/grease_routes_url.php';
     }
 }
