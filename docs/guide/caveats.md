@@ -107,6 +107,19 @@ byte-identity, it hands the work back to the framework:
 
 All of the above produce identical output; they simply don't get the fast path.
 
+### The decimal-cast trait (`HasGreasedDecimalCasts`) is separate on purpose
+
+`decimal:N` casting has its own opt-in trait, [deliberately kept out of `HasGrease`](/guide/decimal-casts)
+because `decimal` usually means money. Two things to know if you reach for it:
+
+- **It never rounds.** The fast path fires only on a value already at the exact target scale; any
+  value that would need rounding or reformatting defers to Brick\Math, exactly as vanilla. The worst
+  case on any input is "no speedup", never a wrong number.
+- **The win is driver-gated** (correctness is not). MySQL/PostgreSQL return canonical decimal
+  strings, so it fires; SQLite returns floats, so it defers, byte-identical, with no speedup. It also
+  does nothing for a model with no `decimal` casts — it's a narrow tier for decimal-dense financial
+  models, not a default.
+
 ## The foundation tiers (container, request, config, router & view index)
 
 These are a *different axis* from the model traits, with their own opt-in — see

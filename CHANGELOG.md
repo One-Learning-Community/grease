@@ -6,6 +6,34 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **Decimal-cast identity short-circuit (`Grease\Concerns\HasGreasedDecimalCasts`) — a standalone,
+  per-model opt-in.** Vanilla casts every `decimal:N` value through Brick\Math
+  (`BigDecimal::of($v)->toScale($N, HalfUp)`), per cast per row, on every read. When the stored
+  value is already a canonical scaled string (`"10.50"` for `decimal:2`) that round-trip is the
+  identity, so the trait returns it verbatim and skips Brick. **It never rounds and never
+  reformats** — anything off-scale, leading-zero, negative-zero, signed, scientific-notation,
+  non-string, or malformed defers to vanilla untouched, so the worst case on any input or any
+  driver is "no speedup", never a wrong number (the risk is asymmetric by construction). Proven
+  byte-identical against the real framework `asDecimal()` over 1,097,907 fuzzed cases (scales 0–4
+  + money adversarials) plus full `toArray()`/`getAttribute()` and standalone-vs-bundled parity in
+  `HasGreasedDecimalCastsParityTest`. Stateless (reads only value + scale → no blueprint, no
+  divergence flag, no invalidation). **Deliberately NOT bundled into `HasGrease`/`GreasedModel`** —
+  `decimal` means money, so it's an explicit, auditable, independently-removable opt-in (the
+  `HasGreasedQueries` precedent). The win is driver-gated: MySQL (`DECIMAL`) and PostgreSQL
+  (`NUMERIC`) return canonical decimal strings → it fires; SQLite returns floats → it defers,
+  byte-identical, no speedup. On a greased transactions row (four decimals, no JSON) it's **−3.7%**
+  (Linux, opcache + JIT), ~260 ns per decimal column — a narrow, compounding tier for decimal-dense
+  financial models, nothing for decimal-free ones. New benches: `benchmarks/decimal_ab.php`
+  (transaction fixture, both arms) and `benchmarks/decimal_spike.php` (the fuzz proof).
+- **`benchmarks/stack_excimer.php`** — an Excimer profiler over the fully-greased cumulative-stack
+  pipeline (the profiler companion `stack_pipeline.php` never had): boots the level-6
+  `PipelineHarness` and samples real kernel requests per route, printing top self/inclusive frames
+  and a speedscope flamegraph. (NB: Excimer disables JIT only while actively sampling, which inflates
+  JIT-friendly numeric code like Brick\Math in a profile — cross-check magnitudes with a non-Excimer
+  A/B.)
+
 ## [0.7.0] - 2026-06-27
 
 ### Added
