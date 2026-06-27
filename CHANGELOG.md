@@ -6,6 +6,8 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-27
+
 ### Added
 
 - **Greased URL generator (`Grease\Routing\UrlGenerator`) — an eager-index fast path for
