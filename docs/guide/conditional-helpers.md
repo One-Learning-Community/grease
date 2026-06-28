@@ -36,8 +36,9 @@ use Illuminate\Foundation\Http\Middleware\TrimStrings;
 })
 ```
 
-Roughly **−40% of the input-scrub cost** in local measurement, and the saving scales with
-input size — the ratio holds on a small request, the absolute grows on a large one.
+Roughly **−59% of the input-scrub cost on a small (~10-field) request and −68% on a large
+nested body** (Linux, via `benchmarks/docker`), and the saving scales with input size — the
+ratio holds on a small request, the absolute grows on a large one.
 
 **Reach for it when** your endpoints take **large or deeply-nested request bodies** — bulk
 APIs, big forms, import payloads. That's where the doubled traversal and the per-leaf
@@ -64,7 +65,7 @@ link, on every render.
 
 The greased [Request](/guide/request) memoizes the decoded path, flattens the patterns once,
 and matches through a `CompiledPatternSet` cached per pattern set. Warm, a nav partial drops
-**~−73%** and a single check **~−64%** in local measurement.
+**~−87%** and a single check **~−86%** (Linux, via `benchmarks/docker`).
 
 This one is explicitly **tuned for the persistent-worker (Octane) model** — the audience
 Grease is built for. The cache lives for the worker's life, so after a route's patterns are
@@ -116,13 +117,13 @@ A `CompiledPatternSet` pays a one-time compile, so it only pays off when that co
 shared across more than one match. Two clear wins, one clear loss:
 
 - **Many matches per build** — match one pattern set against a whole collection (the
-  middleware shape: build once, scrub every input leaf). Local measurement: **~−95%** vs
-  `Str::is` per value.
+  middleware shape: build once, scrub every input leaf). **~−96%** vs `Str::is` per value
+  (Linux, via `benchmarks/docker`).
 - **A long wildcard list** — merging N wildcard patterns into one regex collapses N
-  `preg_match` calls into one, and on a *miss* (the common case) the merged regex
-  fast-rejects in near-constant time while a per-pattern loop scales linearly. At ~50
-  wildcard patterns this is **~−97%** vs a pre-compiled per-pattern loop on a miss — and it
-  grows with the list.
+  `preg_match` calls into one, and the merged regex fast-rejects in near-constant time while
+  a per-pattern loop scales linearly with N. At ~50 wildcard patterns it's **~−96%** vs a
+  pre-compiled per-pattern loop (and ~−98% vs `Str::is`) — and the gap widens as the list
+  grows, because the merged match stays roughly flat while the loop does not.
 - **A single pattern matched once** — *don't bother*. The compile costs more than one
   `Str::is` call; just call `Str::is`. (This is the whole reason `Request::is()` above caches
   across calls rather than compiling per call.)
