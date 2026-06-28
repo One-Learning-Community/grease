@@ -257,4 +257,71 @@ class RequestInputParityTest extends TestCase
         $this->assertSame($first, $second);
         $this->assertSame('body', $r->input('a'));
     }
+
+    /**
+     * `is(...$patterns)` matches the decoded path against patterns via Str::is. The greased
+     * override routes through a compiled pattern set; it must answer identically across literal,
+     * wildcard, multi-pattern, nested-array, match-all, and no-match cases.
+     */
+    #[DataProvider('isCases')]
+    public function test_is_matches_vanilla(string $path, array $patterns): void
+    {
+        $vanilla = VanillaRequest::create($path, 'GET');
+        $greased = GreasedRequest::create($path, 'GET');
+
+        $this->assertSame(
+            $vanilla->is(...$patterns),
+            $greased->is(...$patterns),
+            "path=$path patterns=".json_encode($patterns),
+        );
+    }
+
+    public static function isCases(): iterable
+    {
+        $paths = ['/admin/users', '/admin', '/dashboard', '/api/v1/posts/42', '/', '/a%20b'];
+        $patternArgs = [
+            ['admin/*'], ['admin'], ['dashboard'], ['api/*'], ['admin/*', 'dashboard'],
+            [['admin/*', 'api/*']], ['*'], ['nope'], ['api/v1/*', 'admin/*'], [],
+        ];
+
+        foreach ($paths as $path) {
+            foreach ($patternArgs as $patterns) {
+                yield "$path :: ".json_encode($patterns) => [$path, $patterns];
+            }
+        }
+    }
+
+    public function test_is_reflects_a_path_change_after_reinitialize(): void
+    {
+        // The decoded path is memoized; re-initializing the request (new REQUEST_URI) must flush
+        // it so is() reflects the new path — exactly as vanilla (which never memoizes) does.
+        $probe = function (string $class) {
+            $r = $class::create('/old/path', 'GET');
+            $before = $r->is('old/*');                 // memoizes the decoded path on greased
+            $r->initialize([], [], [], [], [], ['REQUEST_URI' => '/new/path']);
+
+            return ['before' => $before, 'old' => $r->is('old/*'), 'new' => $r->is('new/*')];
+        };
+
+        $this->assertSame($probe(VanillaRequest::class), $probe(GreasedRequest::class));
+    }
+
+    public function test_is_stays_correct_past_the_pattern_cache_cap(): void
+    {
+        // Flood the shared cache with distinct patterns to exceed the cap, then confirm a fresh
+        // pattern still answers identically to vanilla — the over-cap path defers to Str::is.
+        $greased = GreasedRequest::create('/admin/users', 'GET');
+        for ($i = 0; $i < 1100; $i++) {
+            $greased->is("flood-segment-$i/*");
+        }
+
+        $vanilla = VanillaRequest::create('/admin/users', 'GET');
+        foreach (['admin/*', 'admin', 'dashboard/*', 'admin/users', '*'] as $pattern) {
+            $this->assertSame(
+                $vanilla->is($pattern),
+                $greased->is($pattern),
+                "post-cap pattern=$pattern",
+            );
+        }
+    }
 }

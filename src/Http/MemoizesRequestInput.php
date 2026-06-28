@@ -2,6 +2,7 @@
 
 namespace Grease\Http;
 
+use Grease\Support\CompiledPatternSet;
 use Illuminate\Http\Concerns\InteractsWithInput;
 use Illuminate\Support\Arr;
 
@@ -77,6 +78,19 @@ trait MemoizesRequestInput
     /** Memoized `array_replace_recursive(input(), allFiles())` — the base for `all()`. */
     protected ?array $greaseAllBase = null;
 
+    /** Memoized `rawurldecode($this->path())` — stable per request; flushed on bag re-seed. */
+    protected ?string $greaseDecodedPath = null;
+
+    /**
+     * Compiled `is()` pattern sets, shared per worker and keyed by the pattern args. Capped so
+     * dynamic patterns (`is($slug.'/*')`) can't grow it unbounded under a long-lived worker.
+     *
+     * @var array<string, CompiledPatternSet>
+     */
+    protected static array $greaseIsPatterns = [];
+
+    private const GREASE_IS_PATTERN_CAP = 1000;
+
     /**
      * {@inheritDoc}
      */
@@ -116,6 +130,48 @@ trait MemoizesRequestInput
         // construction (content-negotiation middleware), and the input-base memo
         // already keeps this off the per-read hot path.
         return parent::isJson();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * Vanilla allocates a Collection and, for EVERY pattern, recompiles `Str::is`'s regex and
+     * recomputes `decodedPath()` — paid afresh on every call (a nav partial calls this once per
+     * link, every render). Here the decoded path is memoized per request, the varargs are
+     * flattened once, and the match runs through a {@see CompiledPatternSet} cached by the
+     * pattern args (literal-hash + one merged regex). Byte-identical: the set ORs the flattened
+     * patterns exactly as `Collection::contains` + `Str::is` do.
+     *
+     * This is tuned for the persistent-worker (Octane) model: the compiled set is cached per
+     * worker, so after a route's patterns are first seen every later request is a cache hit and a
+     * clear win. A compile only loses to Str::is for a *single* pattern matched once (object +
+     * regex assembly > Str::is's exact-match short circuit) — under a warm worker that is paid at
+     * most once per pattern. And once the shared cache is full (only a flood of distinct/dynamic
+     * patterns gets there), is() defers to vanilla rather than pay a one-shot compile that could
+     * lose — so it bounds memory AND stays never-slower than the framework past the cap.
+     */
+    public function is(...$patterns)
+    {
+        $path = $this->greaseDecodedPath ??= rawurldecode($this->path());
+
+        if (count($patterns) === 1 && is_string($patterns[0])) {
+            $flat = $patterns;            // fast path: a single string pattern
+            $key = $patterns[0];
+        } else {
+            $flat = Arr::flatten($patterns);
+            $key = implode("\0", $flat);
+        }
+
+        if (isset(static::$greaseIsPatterns[$key])) {
+            return static::$greaseIsPatterns[$key]->matches($path);
+        }
+
+        // Cache full: defer to vanilla instead of a one-shot compile that can lose to Str::is.
+        if (count(static::$greaseIsPatterns) >= self::GREASE_IS_PATTERN_CAP) {
+            return parent::is(...$patterns);
+        }
+
+        return (static::$greaseIsPatterns[$key] = new CompiledPatternSet($flat))->matches($path);
     }
 
     /**
@@ -218,5 +274,6 @@ trait MemoizesRequestInput
     {
         $this->greaseInputBase = null;
         $this->greaseAllBase = null;
+        $this->greaseDecodedPath = null;
     }
 }
