@@ -79,6 +79,7 @@ export default defineConfig({
             { text: 'How It Works', link: '/guide/how-it-works' },
             { text: 'The Method', link: '/guide/method' },
             { text: 'Serialization Helpers', link: '/guide/serialization-helpers' },
+            { text: 'Conditional Helpers', link: '/guide/conditional-helpers' },
             { text: 'Benchmarks', link: '/guide/benchmarks' },
           ],
         },
