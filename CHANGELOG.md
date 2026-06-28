@@ -6,6 +6,37 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **Conditional helpers — situational drop-ins for the HTTP request path, documented off the main
+  tier menu (see the "Conditional Helpers" guide).** Each is byte-identical to the vanilla
+  expression it replaces; the "condition" is only about whether the speedup materialises for your
+  traffic, never about correctness.
+  - **`Grease\Http\Middleware\CleanRequestInput`** fuses Laravel's `TrimStrings` +
+    `ConvertEmptyStringsToNull` into one pass. The default stack runs both, and each (via
+    `TransformsRequest::clean`) recursively walks the whole input tree and rebuilds the bag — so
+    input is traversed and rebuilt twice per request, and `TrimStrings` runs `Str::is()` on every
+    string leaf. The fused middleware does both transforms in one walk, hoists the except-merge
+    out of the leaf loop, and matches excepts through a compiled `CompiledPatternSet`: **−59%
+    (small body) to −68% (large nested body)** of the input-scrub cost on Linux, byte-identical
+    (`CleanRequestInputParityTest`). Opt in by swapping the two middleware in `bootstrap/app.php`.
+    One documented caveat — per-middleware `skipWhen` (skip trim but still empty-to-null, or vice
+    versa) is not reproduced; keep the stock pair if you rely on it.
+  - **`Grease\Support\CompiledPatternSet`** — an array-aware pattern matcher compiled once into
+    the fastest faithful `Str::is($patterns, $value)` equivalent: literals to an `isset()` hash, a
+    bare `*` to a short circuit, wildcard patterns to one merged alternation regex. Wins when the
+    build is amortised — one set matched against many values (**~−96%** in the middleware shape),
+    or a long wildcard list (merging collapses N `preg_match` calls into one; **~−96%** vs a
+    pre-compiled per-pattern loop at ~50 patterns, and roughly flat as the list grows). Byte-
+    identical (`CompiledPatternSetParityTest`). A single pattern matched once should still use
+    `Str::is` — the compile only pays off amortised.
+  - **A greased `Grease\Http\Request::is()`** (ships with the Request tier). Vanilla recompiles
+    `Str::is` and recomputes `decodedPath()` per pattern, per call; the override memoises the
+    decoded path and matches through a per-worker-cached `CompiledPatternSet` — **~−86% to −87%**
+    warm on Linux (single check / a 12-link nav partial). Tuned for the persistent-worker (Octane)
+    model; past a 1,000-pattern cache cap it defers to vanilla, so it is never unbounded-slower.
+    Byte-identical (`RequestInputParityTest`).
+
 ## [0.8.0] - 2026-06-27
 
 ### Added
