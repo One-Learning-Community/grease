@@ -15,8 +15,10 @@
  *   fused         one pass, except-merge hoisted, but still Str::is per leaf
  *   fused+hybrid  one pass + the compiled hybrid except matcher (Str::is gone)
  *
- * Output is identical (" " --trim--> "" --null), parity-gated before any timing. Two payloads:
- * a realistic ~10-leaf request and an input-heavy ~100-leaf one.
+ * Output is identical (" " --trim--> "" --null), parity-gated before any timing. Three payloads:
+ * a realistic ~10-leaf request, a wide ~100-leaf one, and a DEEP ProseMirror-style content post
+ * (the case that actually motivates this — vanilla's per-node dotted-prefix concat grows with
+ * nesting depth, which the wide payload never exercises).
  *
  *   php -d xdebug.mode=off -d opcache.jit=tracing -d opcache.enable_cli=1 -d memory_limit=1G \
  *       benchmarks/clean_input_ab.php [iters]
@@ -98,6 +100,83 @@ function largePayload(): array
     return $p;
 }
 
+/**
+ * A realistic *deep* content post: a ProseMirror/TipTap/Lexical-style rich-text document, the
+ * shape a blog post / CMS body / comment editor actually submits. Unlike largePayload (wide and
+ * shallow, depth ~2), this is genuinely NESTED — doc → block → (nested list →)* → text node →
+ * mark → attrs — so it exercises the part of vanilla's cost that grows with DEPTH: every node
+ * rebuilds the dotted `$keyPrefix.$key` from an ever-longer accumulated string. Deterministic.
+ */
+function deepDocumentPayload(): array
+{
+    // A text node carrying marks (links/styles) with their own attr bags — the deep leaves.
+    $text = function (string $t, bool $linked = false) {
+        $node = ['type' => 'text', 'text' => $t];
+        if ($linked) {
+            $node['marks'] = [[
+                'type' => 'link',
+                'attrs' => ['href' => '  https://example.test/x  ', 'title' => '', 'target' => '  _blank  '],
+            ]];
+        }
+
+        return $node;
+    };
+
+    // A paragraph block: a few text runs, some whitespace-padded, some empty (→ null), some linked.
+    $paragraph = function (int $i) use ($text) {
+        return [
+            'type' => 'paragraph',
+            'attrs' => ['textAlign' => $i % 3 === 0 ? '  left  ' : '', 'indent' => $i % 4],
+            'content' => [
+                $text("  Sentence $i with a fair bit of text to walk.  "),
+                $text(' ', $i % 2 === 0),
+                $text('', true),
+                $text("clean-run-$i"),
+            ],
+        ];
+    };
+
+    // A bullet list whose items each hold a paragraph AND a nested sub-list — the depth driver.
+    $nestedList = function (int $section) use ($paragraph) {
+        $items = [];
+        for ($li = 0; $li < 3; $li++) {
+            $items[] = [
+                'type' => 'listItem',
+                'attrs' => ['checked' => $li % 2 === 0],
+                'content' => [
+                    $paragraph($section * 10 + $li),
+                    [
+                        'type' => 'bulletList',
+                        'content' => [[
+                            'type' => 'listItem',
+                            'content' => [$paragraph($section * 100 + $li)],
+                        ]],
+                    ],
+                ],
+            ];
+        }
+
+        return ['type' => 'bulletList', 'content' => $items];
+    };
+
+    $content = [];
+    for ($s = 0; $s < 8; $s++) {
+        $content[] = ['type' => 'heading', 'attrs' => ['level' => ($s % 3) + 1], 'content' => [
+            // headings carry a single text run; some padded, some empty
+            ['type' => 'text', 'text' => $s % 2 === 0 ? "  Heading $s  " : ''],
+        ]];
+        $content[] = $paragraph($s);
+        $content[] = $nestedList($s);
+    }
+
+    return [
+        'title' => '  My Post Title  ',
+        'slug' => '',
+        'status' => 'draft',
+        'body' => ['type' => 'doc', 'attrs' => ['version' => 1], 'content' => $content],
+    ];
+}
+
 $trim = new TrimStrings;
 $convert = new ConvertEmptyStringsToNull;
 $fused = new FusedCleanInput;
@@ -126,13 +205,30 @@ $pct = fn (float $a, float $b) => sprintf('%+.1f%%', $a > 0 ? ($b - $a) / $a * 1
 
 echo 'jit: '.((opcache_get_status(false)['jit']['on'] ?? false) ? 'YES' : 'no')."   iters=$iters\n";
 
-$payloads = ['small' => smallPayload(), 'large' => largePayload()];
+$payloads = [
+    'small' => smallPayload(),
+    'large (wide)' => largePayload(),
+    'deep document' => deepDocumentPayload(),
+];
+
+// Max nesting depth of an array tree — the dimension largePayload doesn't exercise.
+$maxDepth = function (array $a) use (&$maxDepth): int {
+    $d = 1;
+    foreach ($a as $v) {
+        if (is_array($v)) {
+            $d = max($d, 1 + $maxDepth($v));
+        }
+    }
+
+    return $d;
+};
 
 foreach ($payloads as $label => $payload) {
     $leaves = 0;
     array_walk_recursive($payload, function () use (&$leaves) {
         $leaves++;
     });
+    $depth = $maxDepth($payload);
 
     $mk = function () use ($payload): Request {
         $r = Request::create('/x', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode($payload));
@@ -169,10 +265,10 @@ foreach ($payloads as $label => $payload) {
     $fClean = max(0, $fT - $baseline);
     $hClean = max(0, $hT - $baseline);
 
-    echo "\n== $label payload: $leaves leaves — clean cost (request-build baseline subtracted) ==\n";
+    echo "\n== $label payload: $leaves leaves, depth $depth — clean cost (request-build baseline subtracted) ==\n";
     printf("  %-22s %s\n", 'vanilla (trim+convert)', $us($vClean));
     printf("  %-22s %s   (%s vs vanilla)\n", 'fused (Str::is)', $us($fClean), $pct($vClean, $fClean));
     printf("  %-22s %s   (%s vs vanilla, %s vs fused)\n", 'fused + hybrid', $us($hClean), $pct($vClean, $hClean), $pct($fClean, $hClean));
 }
 
-echo "\nParity: OK — fused & fused+hybrid byte-identical to vanilla two-pass on both payloads.\n";
+echo "\nParity: OK — fused & fused+hybrid byte-identical to vanilla two-pass on all payloads.\n";

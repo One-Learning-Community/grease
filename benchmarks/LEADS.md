@@ -343,3 +343,57 @@ the FPM bar.
    a pass.
 5. **Skip entirely:** the Pipeline/Kernel axis (FPM), the Support-primitives axis, and
    every item in the negatives ledger.
+
+---
+
+## Follow-on leads (post-ship — added after the original research snapshot)
+
+### ⏸ All-shallow except fast path for `CleanRequestInput` — SPIKED & PASSED (2026-06-29)
+*Axis: HTTP (rider on the shipped `Grease\Http\Middleware\CleanRequestInput` tier) · Confidence: high (mechanism proven) · Status: parked, revisit on Linux + deep-content target*
+
+**Premise.** `CleanRequestInput` fuses `TrimStrings`+`ConvertEmptyStringsToNull` into one
+pass, but it still *inherits* `TransformsRequest::cleanArray`, which rebuilds the dotted
+`$keyPrefix.$key` string at **every node** of the input tree (for the per-leaf except
+match). On DEEP payloads (a ProseMirror/TipTap content post — `clean_input_ab.php`'s deep
+arm is 1,125 leaves / depth 17) that per-node concat becomes the dominant *shared* cost —
+the one thing the greased class doesn't fold, so its win-vs-vanilla ratio sags at depth
+(−42% small → −35% deep). Lever: when every trim-except pattern is a **dot-free,
+wildcard-free literal** (the default — `password`/`current_password`/`password_confirmation`),
+`Str::is(pattern, K)` can only ever be true for a *top-level* key (a nested key contains
+`.`, which a dot-free literal can never equal). So below depth 1 you can skip BOTH the
+prefix build AND the except check entirely. Implementation: an all-shallow flag computed
+once per request (`no '*' && no '.'` across the merged pattern list), then a `cleanTop`
+(except-check vs bare key) / `cleanDeep` (trim+null only, no key, no prefix) walk split;
+non-shallow except sets fall back to the inherited full-prefix `cleanArray`.
+
+**Measured (macOS, JIT on — `scratchpad/shallow_skip_spike.php`, throwaway):**
+
+| payload | leaves / depth | vanilla | shipped greased | spike (shallow-skip) |
+|---|---|---|---|---|
+| small | 10 / 2 | 8.16µs | −41.6% | −42.6% (**−1.7%** vs shipped) |
+| wide | 100 / 3 | 71.73µs | −43.6% | −45.0% (**−2.4%** vs shipped) |
+| deep document | 1125 / 17 | 1214.72µs | −31.0% | −37.3% (**−9.1%** vs shipped, ~76µs/req) |
+
+**Parity: byte-identical, including the case with teeth.** Adversarial payload — a key
+literally named `password` at depth 2 (vanilla builds `user.profile.password`,
+`Str::is('password', …)` is false → it gets trimmed; the shallow path skips the except
+check at depth → also trims it) plus a top-level `password` (preserved) and a nested
+`current_password` (trimmed → empty → null). All three arms produce identical bytes:
+`{"password":"  top-secret  ","user":{"profile":{"password":"not-excepted-here","current_password":null}},"rows":[{"password":"x"}]}`.
+The flag is recomputed per request from live `$except`+`$neverTrim`, so a runtime
+`except()` adding a wildcard/dotted pattern correctly drops to the fallback walk.
+
+**Why PASSED for now (not a dead end — a deferred ship candidate):**
+- It's a **−9% on a slice-of-a-slice**: only fires on deep payloads, buys back ~76µs of a
+  0.76ms operation. Worth it *if* deep-content endpoints (CMS bodies, rich-text comments)
+  are a real target; marginal on API-shaped benches.
+- **macOS numbers** — per NOTES the −9.1% *ratio* travels better than the absolute µs, but
+  the 76µs could shrink on Linux to where it doesn't justify the cost.
+- **Cost to ship:** a third overridden `TransformsRequest` method (`cleanParameterBag` +
+  `cleanTop`/`cleanDeep` reimplements the recursive walk) = new parity surface to carry,
+  on top of the already-shipped `transform` override.
+
+**Revisit trigger:** confirm the ratio on Linux/`nas`, AND a deep-content endpoint becoming
+a stated target. The spike is throwaway (scratchpad, not committed); the deep-payload bench
+arm that surfaced it lives in `benchmarks/clean_input_ab.php`. Mechanism is fully captured
+above — rebuildable from this entry.
