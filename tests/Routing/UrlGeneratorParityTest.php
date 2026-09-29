@@ -9,6 +9,7 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\RouteCollection;
 use Illuminate\Routing\UrlGenerator as VanillaUrlGenerator;
+use Illuminate\Support\Stringable;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -106,6 +107,14 @@ class UrlGeneratorParityTest extends TestCase
             'value with unicode' => ['users.show', ['user' => 'café'], true],
             'value with reserved' => ['users.show', ['user' => 'a;b,c=d'], true],
             'integer value' => ['users.show', ['user' => 99], true],
+            // laravel/framework#61475: `%`/`?`/`#` inside a parameter are escaped so they can't
+            // truncate the path into a query string / fragment or smuggle an escape sequence.
+            'value with question mark' => ['users.show', ['user' => 'what?'], true],
+            'value with hash' => ['users.show', ['user' => 'c#-notes'], true],
+            'value with percent' => ['users.show', ['user' => '100%'], true],
+            'value with pre-encoded escape' => ['users.show', ['user' => 'a%2Fb'], true],
+            'value with all three, relative' => ['posts.comments', ['post' => 'x?y', 'comment' => '#1 %'], false],
+            'Stringable value' => ['users.show', ['user' => new Stringable('why?')], true],
         ];
     }
 

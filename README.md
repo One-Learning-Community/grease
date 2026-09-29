@@ -136,7 +136,8 @@ composer bench    # phpbench per-op A/B + the SQL suite
 
 ## Requirements
 
-PHP 8.2+, Laravel 12/13.
+PHP 8.2+, Laravel 12.69.2+ or 13.33+ (the current patch line of each supported major — Grease
+overrides framework internals and mirrors the latest vanilla behaviour of each).
 
 ## License
 

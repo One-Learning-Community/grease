@@ -167,6 +167,60 @@ class SqlRoundtripTest extends TestCase
         $this->assertSame(json_encode($v->toArray()), json_encode($g->toArray()));
         $this->assertCount(2, $g->first()->posts);
     }
+
+    /**
+     * Query-time casting: `Builder::withCasts()` merges into the query's *prototype* model and
+     * relies on newInstance() to hand those casts to every hydrated row — the greased slim
+     * newFromBuilder must carry them too.
+     */
+    public function test_query_time_with_casts_reaches_hydrated_rows(): void
+    {
+        $query = fn ($class) => $class::query()
+            ->select('*')
+            ->selectRaw("'7' as post_count")
+            ->withCasts(['post_count' => 'integer', 'name' => 'array'])
+            ->orderBy('id');
+
+        DB::table('rt_authors')->insert(['name' => '["Ada"]', 'age' => 36]);
+
+        $v = $query(VanillaAuthor::class)->get();
+        $g = $query(GreasedAuthor::class)->get();
+
+        $this->assertSame(7, $g->first()->post_count);
+        $this->assertSame(['Ada'], $g->first()->name);
+        $this->assertSame(json_encode($v->toArray()), json_encode($g->toArray()));
+
+        // …and the query-time casts don't leak into the class: a plain query is uncast again.
+        $this->assertSame('["Ada"]', GreasedAuthor::query()->first()->name);
+    }
+
+    /**
+     * A runtime `setTable()` on the prototype (partitioned / archive tables) must reach the
+     * hydrated rows, so their writes go back to the table they were read from.
+     */
+    public function test_runtime_set_table_reaches_hydrated_rows_and_their_writes(): void
+    {
+        Schema::dropIfExists('rt_authors_archive');
+        Schema::create('rt_authors_archive', function (Blueprint $t) {
+            $t->increments('id');
+            $t->string('name');
+            $t->integer('age')->nullable();
+            $t->timestamps();
+        });
+        DB::table('rt_authors_archive')->insert(['name' => 'Grace', 'age' => 85]);
+
+        foreach ([VanillaAuthor::class, GreasedAuthor::class] as $class) {
+            $row = (new $class)->setTable('rt_authors_archive')->newQuery()->first();
+
+            $this->assertSame('rt_authors_archive', $row->getTable(), $class);
+
+            $row->age++;
+            $row->save();
+        }
+
+        $this->assertSame(87, DB::table('rt_authors_archive')->value('age'));
+        $this->assertSame(0, DB::table('rt_authors')->count(), 'a write leaked into the class table');
+    }
 }
 
 class VanillaAuthor extends Model

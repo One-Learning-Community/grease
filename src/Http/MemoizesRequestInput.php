@@ -4,14 +4,16 @@ namespace Grease\Http;
 
 use Grease\Support\CompiledPatternSet;
 use Illuminate\Http\Concerns\InteractsWithInput;
+use Illuminate\Http\Request as BaseRequest;
 use Illuminate\Support\Arr;
+use Symfony\Component\HttpFoundation\File\UploadedFile as SymfonyUploadedFile;
 
 /**
  * Grease HTTP tier — per-instance input memoization.
  *
  * Vanilla {@see InteractsWithInput::input()} rebuilds the
  * merged input map — `$this->getInputSource()->all() + $this->query->all()` — on *every*
- * call, and `all()` wraps that in a fresh `array_replace_recursive(..., allFiles())` every
+ * call, and `all()` wraps that in a fresh `array_replace_recursive(..., allFiles(), ...)` every
  * call. Nearly every accessor funnels through them: `__get`, `offsetGet`, `offsetExists`,
  * `toArray`, and most of `InteractsWithData` (`has`/`only`/`except`/`filled`/`whenHas`…),
  * so a single request rebuilds the same array 10–30×. `isJson()` (called by
@@ -75,8 +77,14 @@ trait MemoizesRequestInput
      */
     protected ?array $greaseInputBase = null;
 
-    /** Memoized `array_replace_recursive(input(), allFiles())` — the base for `all()`. */
+    /** Memoized `input()` + `allFiles()` merge, in vanilla's order — the base for `all()`. */
     protected ?array $greaseAllBase = null;
+
+    /**
+     * Whether the installed vanilla `all()` re-applies input over files (laravel/framework#61221,
+     * 13.26+; never backported to 12.x). Probed once per process.
+     */
+    protected static ?bool $greaseInputOverFiles = null;
 
     /** Memoized `rawurldecode($this->path())` — stable per request; flushed on bag re-seed. */
     protected ?string $greaseDecodedPath = null;
@@ -106,7 +114,15 @@ trait MemoizesRequestInput
      */
     public function all($keys = null)
     {
-        $input = $this->greaseAllBase ??= array_replace_recursive($this->input(), $this->allFiles());
+        if ($this->greaseAllBase === null) {
+            $input = $this->input();
+
+            $this->greaseAllBase = (static::$greaseInputOverFiles ??= static::greaseProbeInputOverFiles())
+                ? array_replace_recursive($input, $this->allFiles(), $input)
+                : array_replace_recursive($input, $this->allFiles());
+        }
+
+        $input = $this->greaseAllBase;
 
         if (! $keys) {
             return $input;
@@ -270,6 +286,18 @@ trait MemoizesRequestInput
     /**
      * Drop the memoized input maps. Used by the value mutators and lifecycle paths.
      */
+    /**
+     * Ask vanilla which merge its `all()` uses: 13.26+ keeps input keys in place and lets input
+     * win a collision with a file (`replace(input, files, input)`); 12.x lets the file win
+     * (`replace(input, files)`). An upload-error file needs nothing on disk.
+     */
+    protected static function greaseProbeInputOverFiles(): bool
+    {
+        $file = new SymfonyUploadedFile('/grease-probe', 'probe', null, UPLOAD_ERR_NO_FILE);
+
+        return (new BaseRequest(['k' => 'input'], [], [], [], ['k' => $file]))->all()['k'] === 'input';
+    }
+
     protected function flushGreaseInput(): void
     {
         $this->greaseInputBase = null;

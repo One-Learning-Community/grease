@@ -61,6 +61,10 @@ class ComponentAttributeBag extends BaseComponentAttributeBag
 
                 if ($key === 'style') {
                     $value = Str::finish($value, ';');
+
+                    if (is_string($defaultsValue) && $defaultsValue !== '') {
+                        $defaultsValue = Str::finish($defaultsValue, ';');
+                    }
                 }
 
                 $appendable[$key] = implode(' ', array_unique(array_filter([$defaultsValue, $value])));

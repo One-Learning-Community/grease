@@ -5,6 +5,7 @@ namespace Grease\Tests\Http;
 use Grease\Http\Request as GreasedRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Request as VanillaRequest;
+use Illuminate\Http\UploadedFile;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -38,6 +39,22 @@ class RequestInputParityTest extends TestCase
     }
 
     /**
+     * A multipart POST whose uploaded files interleave with — and one collides with — the body
+     * keys: `all()` must merge them in vanilla's order and precedence (laravel/framework#61221:
+     * input keys keep their position and win a collision; file-only keys follow).
+     */
+    private static function upload(string $class): VanillaRequest
+    {
+        $file = fn () => new UploadedFile(__FILE__, 'probe.php', 'text/plain', null, true);
+
+        return $class::create('/x?q=1', 'POST', ['a' => 'body', 'doc' => 'as-input', 'z' => 1], [], [
+            'avatar' => $file(),
+            'doc' => $file(),
+            'nested' => ['x' => $file()],
+        ]);
+    }
+
+    /**
      * Read-only accessor probes. Each returns a canonical, comparable result.
      *
      * @return array<string, callable(Request): mixed>
@@ -68,7 +85,7 @@ class RequestInputParityTest extends TestCase
     public static function matrix(): array
     {
         $cases = [];
-        foreach (['get', 'post', 'json'] as $shape) {
+        foreach (['get', 'post', 'json', 'upload'] as $shape) {
             foreach (self::probes() as $name => $probe) {
                 $cases["$shape / $name"] = [$shape, $probe];
             }

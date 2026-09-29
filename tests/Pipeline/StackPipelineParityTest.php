@@ -53,7 +53,9 @@ class StackPipelineParityTest extends TestCase
             .' $h = \Grease\Tests\Fixtures\Pipeline\PipelineHarness::class;'
             .' echo json_encode($h::parityProbe($h::bootLevel((int) $argv[2]), (int) $argv[2]));';
 
-        $cmd = escapeshellarg(PHP_BINARY).' -r '.escapeshellarg($code)
+        // Deprecations from older dependencies (the lowest-deps leg on a newer PHP) would land
+        // in stdout ahead of the JSON; silence only those — real errors still surface below.
+        $cmd = escapeshellarg(PHP_BINARY).' -d '.escapeshellarg('error_reporting=E_ALL & ~E_DEPRECATED').' -r '.escapeshellarg($code)
             .' '.escapeshellarg($autoload).' '.$level.' 2>&1';
 
         $out = (string) shell_exec($cmd);
