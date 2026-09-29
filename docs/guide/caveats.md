@@ -7,7 +7,7 @@ trivial idiomatic workaround.
 
 The full cast contract is asserted **byte-identical to vanilla** in the test suite —
 every cast type, every edge value, every null, every dirty comparison — across PHP
-8.2–8.5 and Laravel 12/13.
+8.2–8.5 and Laravel 12.69.2+ / 13.33+.
 
 ## The guiding principle
 
@@ -68,24 +68,22 @@ protected $casts = ['ssn' => 'encrypted:string'];
 
 This is an undocumented internal — there's no idiomatic reason to override it.
 
-### 3. Reassigning a model's table or date format at runtime
+### 3. Reassigning a model's date format at runtime
 
-The hydration and date tiers treat a model's **table** and **date format** as
-class-level — which they are in essentially every app (`protected $table`,
-`protected $dateFormat`). Two narrow edges fall out of that:
+The date tier treats a model's **date format** as class-level — which it is in
+essentially every app (`protected $dateFormat`). One narrow edge falls out of that:
 
-- **`setTable()` on the model a query is built from** isn't carried onto the rows it
-  hydrates — they get the class-default table. (Setting `$table` as a class property,
-  or on a freshly-constructed model you then query, both work.)
 - **`setDateFormat()` called per instance** after the date fast-path has been certified
   for the class can leave that instance using the previously-certified plan.
 
-Both are vanishingly rare — the standard `protected $dateFormat` / `protected $table`
-declarations are read correctly and cached once. Toggling **timestamps**
-(`$model->timestamps = false` / `withoutTimestamps()`), changing the **primary key**
-(`setKeyName()` / `setKeyType()` / `setIncrementing()`), and runtime
-`mergeCasts()` / `withCasts()` are all *normal* and fully handled — only the two
-runtime reassignments above step outside the cache.
+That's vanishingly rare — the standard `protected $dateFormat` declaration is read
+correctly and cached once. Toggling **timestamps** (`$model->timestamps = false` /
+`withoutTimestamps()`), changing the **primary key** (`setKeyName()` / `setKeyType()` /
+`setIncrementing()`), runtime `mergeCasts()` / `withCasts()` — on a model *or* as
+query-time casting (`Order::query()->withCasts([...])`) — and a runtime `setTable()` on
+the model a query is built from (partitioned / archive tables) are all *normal* and fully
+handled: the hydrated rows carry the query model's table and casts exactly as vanilla's
+`newInstance()` would.
 
 ## What defers to vanilla (correct, just unaccelerated)
 
