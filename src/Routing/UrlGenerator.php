@@ -187,6 +187,12 @@ class UrlGenerator extends BaseUrlGenerator
                 return null;
             }
 
+            // Vanilla's RouteUrlGenerator::encodeParameter() (laravel/framework#61475): escape
+            // `%`/`?`/`#` so a value can't truncate the path or smuggle an escape sequence.
+            if (is_string($value) && strpbrk($value, '%?#') !== false) {
+                $value = strtr($value, ['%' => '%25', '?' => '%3F', '#' => '%23']);
+            }
+
             $path .= $value.$segments[$i + 1];
         }
 

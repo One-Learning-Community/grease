@@ -19,20 +19,21 @@ use ReflectionClass;
  * other tiers on. (A newer L11/L12 feature core hasn't tuned the per-instance cost of.)
  *
  * This tier keeps the resolution byte-for-byte identical and only swaps the cache *shape*:
- * the concatenated string key becomes a two-level `[$class][$attributeClass]` lookup, with
- * the per-class sub-array fetched **once** into a local so the warm path is a single class
- * lookup + one `array_key_exists` — no string built, nothing allocated. (The first cut keyed
- * into the three-level blueprint and *regressed*: the extra level, traversed three times a
- * call, out-cost vanilla's concat — so this uses a flat two-level carve-out instead, which
- * the micro-A/B and the eager profile both confirm is the faster shape.)
+ * the concatenated `"$class@$attributeClass@$property"` key becomes a nested
+ * `[$class][$attributeClass][$property]` lookup, fetched to the per-attribute leaf in **one**
+ * `?? null` expression so the warm path is a single hash walk + one `array_key_exists` — no
+ * string built, nothing allocated. (The first cut keyed into the blueprint and re-traversed
+ * the levels three times a call, which *regressed* against vanilla's concat; a single fetch is
+ * what wins — `benchmarks/class_attribute_ab.php`, ~−11% warm.)
  *
- * **Byte-identical, bug-for-bug:** the cold path is verbatim vanilla — the reflection walk up
- * the parent chain, `getAttributes($attributeClass)[0]->newInstance()`, the `$property`
- * extraction, the `catch (\Exception)` swallow, and the `null` memo for an absent attribute.
- * Crucially the key carries the class and attribute but **not** `$property` — exactly like
- * vanilla — so when the same attribute is resolved once with a property and once without
- * (e.g. `#[Table]` via `getTable()` and via the `timestamps` lookup), both calls return
- * whatever the *first* one cached. That quirk is Eloquent's; we reproduce it precisely.
+ * **Byte-identical:** the cold path is verbatim vanilla — the reflection walk up the parent
+ * chain (checking each class's own attributes, then its traits'), `getAttributes(
+ * $attributeClass)[0]->newInstance()`, the `$property` extraction, the `catch (\Exception)`
+ * swallow, and the `null` memo for an absent attribute. Like vanilla (since
+ * laravel/framework#60815) the key carries the property too — `[$class][$attributeClass]
+ * [$property ?? '']` — so `#[Table]` resolved via `getTable()` and via the `timestamps` lookup
+ * are cached independently. (`null` and `''` share a slot, exactly as vanilla's `'@'.$property`
+ * concat makes them; `?? ''` also keeps a `null` array offset out of PHP 8.5's deprecation.)
  *
  * A carve-out static rather than a blueprint key (like the `getDateFormat` connection cache):
  * class-level PHP attributes are immutable for a process's lifetime, so this cache never needs
@@ -43,9 +44,9 @@ use ReflectionClass;
 trait HasGreasedClassAttributes
 {
     /**
-     * Resolved class attributes, keyed `[class][attributeClass]`.
+     * Resolved class attributes, keyed `[class][attributeClass][property]`.
      *
-     * @var array<class-string, array<class-string, mixed>>
+     * @var array<class-string, array<class-string, array<string, mixed>>>
      */
     protected static array $greaseClassAttributes = [];
 
@@ -55,11 +56,12 @@ trait HasGreasedClassAttributes
     protected static function resolveClassAttribute(string $attributeClass, ?string $property = null, ?string $class = null)
     {
         $class ??= static::class;
+        $key = $property ?? '';
 
-        $cache = static::$greaseClassAttributes[$class] ?? null;
+        $cache = static::$greaseClassAttributes[$class][$attributeClass] ?? null;
 
-        if ($cache !== null && array_key_exists($attributeClass, $cache)) {
-            return $cache[$attributeClass];
+        if ($cache !== null && array_key_exists($key, $cache)) {
+            return $cache[$key];
         }
 
         try {
@@ -71,14 +73,25 @@ trait HasGreasedClassAttributes
                 if (count($attributes) > 0) {
                     $instance = $attributes[0]->newInstance();
 
-                    return static::$greaseClassAttributes[$class][$attributeClass]
+                    return static::$greaseClassAttributes[$class][$attributeClass][$key]
                         = $property ? $instance->{$property} : $instance;
+                }
+
+                foreach ($reflection->getTraits() as $trait) {
+                    $attributes = $trait->getAttributes($attributeClass);
+
+                    if (count($attributes) > 0) {
+                        $instance = $attributes[0]->newInstance();
+
+                        return static::$greaseClassAttributes[$class][$attributeClass][$key]
+                            = $property ? $instance->{$property} : $instance;
+                    }
                 }
             } while ($reflection = $reflection->getParentClass());
         } catch (\Exception) {
             //
         }
 
-        return static::$greaseClassAttributes[$class][$attributeClass] = null;
+        return static::$greaseClassAttributes[$class][$attributeClass][$key] = null;
     }
 }

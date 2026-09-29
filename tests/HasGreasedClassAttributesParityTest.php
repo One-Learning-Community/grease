@@ -86,24 +86,51 @@ class HasGreasedClassAttributesParityTest extends TestCase
     }
 
     /**
-     * Vanilla keys the cache by class+attribute but NOT property, so when the same attribute
-     * is resolved once with a property and once without, the second call returns whatever the
-     * first cached. The greased cache must reproduce that order-dependent quirk precisely.
+     * Vanilla keys the cache by class+attribute+property (laravel/framework#60815), so the same
+     * attribute resolved once with a property and once without yields two independent answers,
+     * in either order. (Before 13.21 the key omitted the property and the second call returned
+     * whatever the first cached — a quirk Grease once reproduced; the floor now excludes it.)
      */
-    public function test_property_less_cache_key_quirk_is_reproduced(): void
+    public function test_property_is_part_of_the_cache_key_in_either_order(): void
     {
-        // Order A: no-property first → both cache the Table *instance*, so the property call
-        // returns the instance (not the bool).
+        // Order A: no-property first, then the property → the instance, then the bool.
         $vA = $this->norm($this->secondOf(VanillaColAFixture::class, [Table::class, null], [Table::class, 'timestamps']));
         $gA = $this->norm($this->secondOf(GreasedColAFixture::class, [Table::class, null], [Table::class, 'timestamps'], fresh: true));
         $this->assertSame($vA, $gA);
-        $this->assertIsArray($gA, 'order A second call should return the cached Table instance');
+        $this->assertFalse($gA, 'order A second call should return the timestamps bool');
 
-        // Order B: property first → both cache the bool, so the no-property call returns it.
+        // Order B: property first, then no property → the bool, then the instance.
         $vB = $this->norm($this->secondOf(VanillaColBFixture::class, [Table::class, 'timestamps'], [Table::class, null]));
         $gB = $this->norm($this->secondOf(GreasedColBFixture::class, [Table::class, 'timestamps'], [Table::class, null], fresh: true));
         $this->assertSame($vB, $gB);
-        $this->assertFalse($gB, 'order B second call should return the cached timestamps bool');
+        $this->assertIsArray($gB, 'order B second call should return the Table instance');
+    }
+
+    /**
+     * Vanilla also reads attributes declared on a *trait* the class (or a parent) uses
+     * (laravel/framework#60566) — the class's own attribute wins, then its traits, then the
+     * parent's. Every shape resolved on both sides and compared.
+     */
+    public function test_attributes_declared_on_traits_are_resolved(): void
+    {
+        $cases = [
+            [VanillaTraitFixture::class, GreasedTraitFixture::class],           // trait only
+            [VanillaTraitChildFixture::class, GreasedTraitChildFixture::class], // trait on parent
+            [VanillaTraitOwnFixture::class, GreasedTraitOwnFixture::class],     // own beats trait
+        ];
+
+        foreach ($cases as [$vanilla, $greased]) {
+            foreach ([[Table::class, 'name'], [Fillable::class, 'columns'], [Table::class, null]] as [$attr, $property]) {
+                $this->assertSame(
+                    $this->norm($this->resolve($vanilla, $attr, $property)),
+                    $this->norm($this->resolve($greased, $attr, $property)),
+                    "$greased resolve($attr, ".var_export($property, true).')',
+                );
+            }
+        }
+
+        $this->assertSame('trait_widgets', (new GreasedTraitFixture)->getTable());
+        $this->assertSame(['from_trait'], (new GreasedTraitFixture)->getFillable());
     }
 
     public function test_integration_getters_route_through_the_override(): void
@@ -125,14 +152,15 @@ class HasGreasedClassAttributesParityTest extends TestCase
     public function test_absent_attribute_is_memoized_as_null_in_the_carveout(): void
     {
         // The point of the tier: the common no-attribute case caches a null (not a re-resolve),
-        // in the dedicated carve-out static keyed [class][attributeClass].
+        // in the dedicated carve-out static keyed [class][attributeClass][property].
         $this->resolve(GreasedPlainFixture::class, Fillable::class, 'columns');
 
         $cache = (new \ReflectionProperty(GreasedPlainFixture::class, 'greaseClassAttributes'))->getValue();
 
         $this->assertArrayHasKey(GreasedPlainFixture::class, $cache);
         $this->assertArrayHasKey(Fillable::class, $cache[GreasedPlainFixture::class]);
-        $this->assertNull($cache[GreasedPlainFixture::class][Fillable::class]);
+        $this->assertArrayHasKey('columns', $cache[GreasedPlainFixture::class][Fillable::class]);
+        $this->assertNull($cache[GreasedPlainFixture::class][Fillable::class]['columns']);
     }
 
     /** Invoke the protected static resolveClassAttribute via reflection. */
@@ -218,4 +246,30 @@ class VanillaColBFixture extends Model {}
 class GreasedColBFixture extends Model
 {
     use HasGreasedClassAttributes;
+}
+
+#[Table(name: 'trait_widgets')]
+#[Fillable(['from_trait'])]
+trait DeclaresTraitAttributes {}
+
+class VanillaTraitFixture extends Model
+{
+    use DeclaresTraitAttributes;
+}
+class VanillaTraitChildFixture extends VanillaTraitFixture {}
+#[Table(name: 'own_widgets')]
+class VanillaTraitOwnFixture extends Model
+{
+    use DeclaresTraitAttributes;
+}
+
+class GreasedTraitFixture extends Model
+{
+    use DeclaresTraitAttributes, HasGreasedClassAttributes;
+}
+class GreasedTraitChildFixture extends GreasedTraitFixture {}
+#[Table(name: 'own_widgets')]
+class GreasedTraitOwnFixture extends Model
+{
+    use DeclaresTraitAttributes, HasGreasedClassAttributes;
 }
