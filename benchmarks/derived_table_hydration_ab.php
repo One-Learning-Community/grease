@@ -1,11 +1,13 @@
 <?php
 
 /**
- * A/B: `getTable()` on a convention-named model (no `$table` — the Laravel default). Vanilla
- * re-derives `Str::snake(Str::pluralStudly(class_basename($this)))` on every call; greased
- * memoizes the class-pure derived name. Also counts how often a typical query path calls it.
+ * A/B: hydrating a convention-named model (no `$table` — the Laravel default). Vanilla's
+ * newFromBuilder → newInstance → `setTable($this->getTable())` re-derives
+ * `Str::snake(Str::pluralStudly(class_basename($this)))` for every row; the greased slim
+ * path memoizes that class-pure name (only when getTable() is vanilla's). Also counts how
+ * often an ordinary query path calls getTable().
  *
- *   php benchmarks/get_table_ab.php [iterations]
+ *   php benchmarks/derived_table_hydration_ab.php [rows]
  */
 
 require __DIR__.'/../vendor/autoload.php';
@@ -20,13 +22,14 @@ class BlogPostGreased extends Model
     use HasGrease;
 }
 
-$n = (int) ($argv[1] ?? 1_000_000);
+$n = (int) ($argv[1] ?? 200_000);
+$row = ['id' => 1, 'title' => 'hello', 'created_at' => '2026-01-01 00:00:00', 'updated_at' => '2026-01-01 00:00:00'];
 
-$time = function (Model $m) use ($n): float {
-    $m->getTable();
+$time = function (Model $prototype) use ($n, $row): float {
+    $prototype->newFromBuilder($row);
     $t = hrtime(true);
     for ($i = 0; $i < $n; $i++) {
-        $m->getTable();
+        $prototype->newFromBuilder($row);
     }
 
     return (hrtime(true) - $t) / $n;
@@ -35,7 +38,7 @@ $time = function (Model $m) use ($n): float {
 for ($r = 0; $r < 3; $r++) {
     $v = $time(new BlogPostVanilla);
     $g = $time(new BlogPostGreased);
-    printf("getTable(): vanilla %.1fns  greased %.1fns  %+.1f%%\n", $v, $g, ($g / $v - 1) * 100);
+    printf("hydrate/row: vanilla %.0fns  greased %.0fns  %+.1f%%\n", $v, $g, ($g / $v - 1) * 100);
 }
 
 // How many getTable() calls does an ordinary query + hydrate + save make?

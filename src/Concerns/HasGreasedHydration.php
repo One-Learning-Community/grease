@@ -2,6 +2,10 @@
 
 namespace Grease\Concerns;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+use ReflectionMethod;
+
 /**
  * Tier 1 — construction & hydration.
  *
@@ -85,20 +89,6 @@ trait HasGreasedHydration
     }
 
     /**
-     * Memoize the derived table name. Vanilla re-derives
-     * `Str::snake(Str::pluralStudly(class_basename($this)))` on every call for a model with
-     * no `$table` — a class-pure string, but `getTable()` runs per hydrated row (via
-     * newFromBuilder) and again under every `qualifyColumn()`/relation/`save()`. An explicit
-     * or runtime-set `$table` still wins first, exactly as vanilla. (The one input outside
-     * the class is the Pluralizer language: set it with `Pluralizer::useLanguage()` at boot,
-     * before models are used — the same point config is read.)
-     */
-    public function getTable()
-    {
-        return $this->table ?? (static::$greaseBlueprint[static::class]['derivedTable'] ??= parent::getTable());
-    }
-
-    /**
      * Slim hydration: __construct already applied the blueprint (casts, connection
      * defaults), so skip newInstance()'s redundant self-merge of casts, fill([]) and
      * first setConnection.
@@ -107,7 +97,8 @@ trait HasGreasedHydration
      * because they can differ from the class defaults at runtime:
      *  - its table (`setTable($this->getTable())`) — a runtime `setTable('orders_2023')`
      *    on the prototype must reach the hydrated rows, or their save()/delete() would hit
-     *    the class table; a derived table name is written onto the row just as vanilla does.
+     *    the class table; a derived table name is written onto the row just as vanilla does
+     *    (see greaseHydrationTable() for why that stays cheap).
      *  - its casts — `Builder::withCasts()` merges query-time casts into the prototype and
      *    relies on newInstance() to hand them on. Instances share the blueprint's casts
      *    array, so the `!==` is a pointer compare until the prototype actually diverged.
@@ -119,7 +110,7 @@ trait HasGreasedHydration
     {
         $model = new static;
         $model->exists = true;
-        $model->setTable($this->getTable());
+        $model->setTable($this->greaseHydrationTable());
 
         if ($this->casts !== $model->casts) {
             $model->mergeCasts($this->casts);
@@ -130,5 +121,24 @@ trait HasGreasedHydration
         $model->fireModelEvent('retrieved', false);
 
         return $model;
+    }
+
+    /**
+     * `$this->getTable()`, minus vanilla's per-call re-derivation. For a model with no `$table`,
+     * vanilla's `getTable()` runs `Str::snake(Str::pluralStudly(class_basename($this)))` —
+     * ~2µs of inflector work per hydrated row for a class-pure string. When the model inherits
+     * vanilla `Model::getTable()` unchanged, the derived name is memoized per class (an explicit
+     * or runtime-set `$table` still wins first, exactly as vanilla). Any override — a sharded
+     * `getTable()`, AsPivot's, a user's — is called every time, byte-for-byte vanilla. Kept here
+     * rather than as a trait `getTable()` so it can never collide with another trait's.
+     */
+    protected function greaseHydrationTable(): string
+    {
+        $derived = static::$greaseBlueprint[static::class]['derivedTable']
+            ??= (new ReflectionMethod($this, 'getTable'))->class === Model::class
+                ? Str::snake(Str::pluralStudly(class_basename($this)))
+                : false;
+
+        return $derived === false ? $this->getTable() : ($this->table ?? $derived);
     }
 }

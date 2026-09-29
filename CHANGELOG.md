@@ -14,9 +14,10 @@ All notable changes to `grease` are documented here. The format is based on
   `setTable()` on the model a query is built from (partitioned / archive tables) produced rows
   whose `save()`/`delete()` targeted the *class* table. Both now match vanilla
   (`SqlRoundtripTest`); the old "runtime `setTable()`" caveat is gone. A model with no `$table`
-  also gets its derived table name written onto hydrated rows, as vanilla does — and
-  `getTable()` now memoizes that derived name per class, so correct hydration costs ~5–10% per
-  row over the old (incorrect) path, not the ~80% a per-row `Str::pluralStudly()` would.
+  also gets its derived table name written onto hydrated rows, as vanilla does — memoized per
+  class during hydration (only when the model inherits vanilla `getTable()`; any override, e.g.
+  sharded or `AsPivot`, is called per row exactly as vanilla), so correct hydration costs ~5–10%
+  per row over the old (incorrect) path, not the ~80% a per-row `Str::pluralStudly()` would.
 - **Upstream drift since the last CI run** — Laravel patch releases changed four overridden
   methods, and Grease now mirrors each:
   - `#[Refreshes]` (13.33) — the hydration snapshot dropped `$refreshes`, so every model after

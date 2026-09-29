@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Attributes\Visible;
 use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Concerns\AsPivot;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -104,6 +105,44 @@ class HasGreaseWholeStateParityTest extends TestCase
     }
 
     /**
+     * The derived-table memo must only apply to vanilla `Model::getTable()`. An instance-dependent
+     * override (sharding) is called on every hydration — each prototype hands on its own table.
+     */
+    public function test_instance_dependent_get_table_override_is_honored(): void
+    {
+        foreach ([2023, 2024, 2023] as $year) {
+            $hydrate = function (string $class) use ($year) {
+                $prototype = new $class;
+                $prototype->year = $year;
+                $row = $prototype->newFromBuilder(['id' => 1]);
+
+                return [$this->state($row), $row->getTable()];
+            };
+
+            [$vanillaState, $vanillaTable] = $hydrate(VanillaShardedOrder::class);
+            [$greasedState, $greasedTable] = $hydrate(GreasedShardedOrder::class);
+
+            $this->assertSame("orders_$year", $vanillaState['table'], 'vanilla hands on the prototype table');
+            $this->assertSame($vanillaState, $greasedState, "year $year");
+            $this->assertSame($vanillaTable, $greasedTable);
+        }
+    }
+
+    /**
+     * HasGrease must compose with any other trait that defines getTable() (AsPivot, …) — this file
+     * loading at all proves there's no trait-method collision — and hydrate the same state.
+     */
+    public function test_composes_with_a_trait_that_defines_get_table(): void
+    {
+        for ($i = 0; $i < 2; $i++) {
+            $this->assertSame(
+                $this->state((new VanillaAsPivotModel)->newFromBuilder(['id' => 1])),
+                $this->state((new GreasedAsPivotModel)->newFromBuilder(['id' => 1])),
+            );
+        }
+    }
+
+    /**
      * Every instance property, read from Model scope, minus Grease's own bookkeeping. A derived
      * table name embeds the class name, so the Vanilla/Greased prefix is normalized away.
      */
@@ -112,7 +151,7 @@ class HasGreaseWholeStateParityTest extends TestCase
         $vars = (fn () => get_object_vars($this))->call($model);
 
         if (is_string($vars['table'])) {
-            $vars['table'] = preg_replace('/^(vanilla|greased)_/', '', $vars['table']);
+            $vars['table'] = preg_replace('/^(vanilla|greased)_?/', '', $vars['table']);
         }
 
         return array_filter($vars, fn ($key) => ! str_starts_with($key, 'grease'), ARRAY_FILTER_USE_KEY);
@@ -166,4 +205,29 @@ class VanillaWholeStatePlain extends Model {}
 class GreasedWholeStatePlain extends Model
 {
     use HasGrease;
+}
+
+class VanillaShardedOrder extends Model
+{
+    public int $year = 2020;
+
+    public function getTable()
+    {
+        return 'orders_'.$this->year;
+    }
+}
+
+class GreasedShardedOrder extends VanillaShardedOrder
+{
+    use HasGrease;
+}
+
+class VanillaAsPivotModel extends Model
+{
+    use AsPivot;
+}
+
+class GreasedAsPivotModel extends Model
+{
+    use AsPivot, HasGrease;
 }
