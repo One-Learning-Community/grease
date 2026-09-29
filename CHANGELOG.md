@@ -6,6 +6,43 @@ All notable changes to `grease` are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hydrated models now carry the query model's runtime table and casts**, exactly as vanilla's
+  `newInstance()` does. The slim `newFromBuilder` built rows from class defaults, so
+  query-time casting (`Model::query()->withCasts([...])`) was silently ignored, and a runtime
+  `setTable()` on the model a query is built from (partitioned / archive tables) produced rows
+  whose `save()`/`delete()` targeted the *class* table. Both now match vanilla
+  (`SqlRoundtripTest`); the old "runtime `setTable()`" caveat is gone. A model with no `$table`
+  also gets its derived table name written onto hydrated rows, as vanilla does — and
+  `getTable()` now memoizes that derived name per class, so correct hydration costs ~5–10% per
+  row over the old (incorrect) path, not the ~80% a per-row `Str::pluralStudly()` would.
+- **Upstream drift since the last CI run** — Laravel patch releases changed four overridden
+  methods, and Grease now mirrors each:
+  - `#[Refreshes]` (13.33) — the hydration snapshot dropped `$refreshes`, so every model after
+    the first per class silently lost refresh-after-write.
+  - `resolveClassAttribute()` (13.21 / 13.22) — the cache key now includes the property, and
+    attributes declared on traits are resolved.
+  - `Request::all()` (13.26) — input keys keep their position and win a collision with an
+    uploaded file. Probed once per process, since 12.x keeps the old order.
+  - `route()` parameters (12.69.2 / 13.31) — `%`, `?` and `#` inside a parameter are escaped
+    (`%25`/`%3F`/`%23`); the URL fast path emitted them raw, truncating the path.
+  - `ComponentAttributeBag::merge()` (12.63 / 13.19) — a `style` default is now terminated with
+    `;` before the component's own style is appended.
+- **`HasGreaseWholeStateParityTest`** — the drift net that would have caught the above: it
+  compares a greased model's *entire* instance state against vanilla (cold, warm, hydrated) for
+  a model carrying every Eloquent class attribute, plus a tripwire that fails when Laravel adds
+  an attribute class the fixtures don't cover.
+
+### Changed
+
+- **Requires Laravel `^12.69.2 || ^13.33`** (was `^12.0 || ^13.0`). Grease overrides framework
+  internals; pinning to each major's current patch line lets it mirror the latest vanilla
+  behaviour instead of branching per patch release. `composer update` within your major.
+- CI runs weekly on a schedule (so upstream drift fails the build within days, not at the next
+  push) and adds a lowest-deps leg for the Laravel 13 floor.
+- The Livewire compatibility proof now also runs against Livewire 4.
+
 ## [0.9.0] - 2026-06-27
 
 ### Added

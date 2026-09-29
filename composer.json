@@ -17,14 +17,14 @@
     ],
     "require": {
         "php": "^8.2",
-        "illuminate/database": "^12.0 || ^13.0",
-        "illuminate/events": "^12.0 || ^13.0",
-        "illuminate/support": "^12.0 || ^13.0",
-        "illuminate/view": "^12.0 || ^13.0"
+        "illuminate/database": "^12.69.2 || ^13.33",
+        "illuminate/events": "^12.69.2 || ^13.33",
+        "illuminate/support": "^12.69.2 || ^13.33",
+        "illuminate/view": "^12.69.2 || ^13.33"
     },
     "require-dev": {
         "laravel/pint": "^1.29",
-        "livewire/livewire": "^3.0",
+        "livewire/livewire": "^3.0 || ^4.0",
         "orchestra/testbench": "^10.0 || ^11.0",
         "phpbench/phpbench": "^1.2",
         "phpunit/phpunit": "^11.0 || ^12.0"

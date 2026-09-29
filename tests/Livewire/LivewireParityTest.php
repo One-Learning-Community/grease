@@ -175,9 +175,13 @@ class LivewireParityTest extends TestCase
         return Checksum::generate($snapshot);
     }
 
-    /** Strip the per-request-random wire:* attributes, leaving the rendered body to compare. */
+    /**
+     * Strip the per-request-random wire:* attributes — and Livewire 4's `wire:name`, which is
+     * the component's own name and so differs between the vanilla and greased twins by
+     * construction — leaving the rendered body to compare.
+     */
     private function body(string $html): string
     {
-        return preg_replace('/\s*wire:(id|snapshot|effects)="[^"]*"/', '', $html);
+        return preg_replace('/\s*wire:(id|snapshot|effects|name)="[^"]*"/', '', $html);
     }
 }

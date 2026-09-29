@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Grease overrides framework internals, so a quiet repo can still break: a Laravel patch
+  # release that changes an overridden method is only caught if CI runs against it. Weekly
+  # against the latest releases turns upstream drift into a red build within days.
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
 
 jobs:
   test:
@@ -53,12 +59,23 @@ jobs:
       - name: Parity smoke against real queries (the package's core promise)
         run: php benchmarks/realworld.php 1
 
-  # Resolve the *lowest* versions our constraints allow, to prove the declared
-  # floor (illuminate ^12.0) is honest — Grease overrides framework internals, so a
+  # Resolve the *lowest* versions our constraints allow, to prove each declared
+  # floor (illuminate ^12.69.2 / ^13.33) is honest — Grease overrides framework internals, so a
   # method that only landed in a later 12.x patch would slip through "highest" CI.
   lowest:
-    name: Lowest deps · PHP 8.2 · Laravel 12
+    name: Lowest deps · PHP ${{ matrix.php }} · Laravel ${{ matrix.laravel }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.2'
+            laravel: '12.*'
+            testbench: '10.*'
+          - php: '8.3'
+            laravel: '13.*'
+            testbench: '11.*'
 
     steps:
       - name: Checkout
@@ -67,15 +84,15 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, pdo, sqlite, pdo_sqlite
           coverage: none
 
-      - name: Pin Laravel & Testbench to the 12 floor
+      - name: Pin Laravel & Testbench to this major's floor
         run: >
           composer require
-          "laravel/framework:12.*"
-          "orchestra/testbench:10.*"
+          "laravel/framework:${{ matrix.laravel }}"
+          "orchestra/testbench:${{ matrix.testbench }}"
           --no-interaction --no-update
 
       - name: Install the lowest allowed dependencies
