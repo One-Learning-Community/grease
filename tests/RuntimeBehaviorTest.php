@@ -90,13 +90,31 @@ class RuntimeBehaviorTest extends TestCase
         $this->assertEquals($v->getCasts(), $g->getCasts());
     }
 
-    public function test_with_casts_is_not_stale(): void
+    public function test_runtime_boolean_cast_is_not_stale(): void
     {
         $g = (new GreasedSample)->newFromBuilder($this->sampleRow(['extra' => '1']));
         $g->getCasts();
-        $g->withCasts(['extra' => 'boolean']);
+        $g->mergeCasts(['extra' => 'boolean']);
 
         $this->assertSame(true, $g->extra);
+    }
+
+    public function test_instance_with_casts_matches_vanilla(): void
+    {
+        // `$model->withCasts()` forwards to a fresh query's Builder::withCasts(). Before
+        // Laravel 13.35 (#61883) that mutated the instance; since, it clones the prototype
+        // and leaves the instance alone. Either way, greased must do what vanilla does.
+        $row = $this->sampleRow(['extra' => '1']);
+
+        $g = (new GreasedSample)->newFromBuilder($row);
+        $g->getCasts();
+        $g->withCasts(['extra' => 'boolean']);
+
+        $v = (new VanillaSample)->newFromBuilder($row);
+        $v->withCasts(['extra' => 'boolean']);
+
+        $this->assertSame($v->extra, $g->extra);
+        $this->assertEquals($v->getCasts(), $g->getCasts());
     }
 
     public function test_recasting_an_already_warmed_key_is_not_stale(): void
@@ -107,10 +125,10 @@ class RuntimeBehaviorTest extends TestCase
 
         $g = (new GreasedSample)->newFromBuilder($row);
         $this->assertSame(42, $g->int_val);          // warms castTypes['int_val'] = 'int'
-        $g->withCasts(['int_val' => 'string']);       // override an already-cached cast type
+        $g->mergeCasts(['int_val' => 'string']);      // override an already-cached cast type
 
         $v = (new VanillaSample)->newFromBuilder($row);
-        $v->withCasts(['int_val' => 'string']);
+        $v->mergeCasts(['int_val' => 'string']);
 
         $this->assertSame('42', $g->int_val, 'stale cached cast type after runtime re-cast');
         $this->assertSame($v->int_val, $g->int_val);
